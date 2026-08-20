@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime, STATUS_LABELS } from '@/lib/utils'
-import { createClient } from '@/lib/supabase/client'
 import type { MaintenanceStatus } from '@/lib/types'
 import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 
@@ -20,8 +19,6 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | 'all'>('all')
   const [filterProject, setFilterProject] = useState('')
-  const supabase = createClient()
-
   const projects = useMemo(() => {
     const seen = new Map<string, string>()
     for (const item of items) {
@@ -48,7 +45,11 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
 
   async function updateStatus(itemId: string, status: MaintenanceStatus) {
     setSubmitting(prev => ({ ...prev, [itemId]: true }))
-    await supabase.rpc('portal_update_status', { p_token: token, p_item_id: itemId, p_status: status })
+    await fetch(`/api/portal/${token}/update-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, status }),
+    })
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
     setSubmitting(prev => ({ ...prev, [itemId]: false }))
   }
@@ -57,14 +58,14 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     const content = comments[itemId]?.trim()
     if (!content) return
     setSubmitting(prev => ({ ...prev, [`comment-${itemId}`]: true }))
-    const { data } = await supabase.rpc('portal_add_comment', {
-      p_token: token,
-      p_item_id: itemId,
-      p_author: contractor.company_name,
-      p_content: content,
+    const res = await fetch(`/api/portal/${token}/add-comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, author: contractor.company_name, content }),
     })
-    if (data && !(data as any).error) {
-      setItems(prev => prev.map(i => i.id === itemId ? { ...i, comments: [...(i.comments ?? []), data] } : i))
+    const json = await res.json()
+    if (json.data && !json.data.error) {
+      setItems(prev => prev.map(i => i.id === itemId ? { ...i, comments: [...(i.comments ?? []), json.data] } : i))
       setComments(prev => ({ ...prev, [itemId]: '' }))
     }
     setSubmitting(prev => ({ ...prev, [`comment-${itemId}`]: false }))
