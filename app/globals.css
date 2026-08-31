@@ -274,6 +274,24 @@ select.input {
 .breadcrumb-link { color: #787774; text-decoration: none; }
 .breadcrumb-link:hover { color: #37352f; }
 
+/* ── Live indicator ─────────────────────────────────────────────────── */
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d0d0d0;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.live-dot--active {
+  background: #2f9e44;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── Skeleton loading ───────────────────────────────────────────────── */
 .skeleton {
   background: linear-gradient(90deg, #f0f0ee 25%, #e5e5e3 50%, #f0f0ee 75%);

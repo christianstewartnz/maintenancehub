@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronRight, AlertTriangle, Clock } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getAgeClass } from '@/lib/utils'
 import type { Project, MaintenanceItem, MaintenanceStatus } from '@/lib/types'
@@ -34,6 +36,24 @@ export default function DashboardClient({ projects, items }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<MaintenanceStatus | 'all'>('all')
+  const [isLive, setIsLive] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('dashboard_realtime')
+      .on('postgres_changes' as any, {
+        event: '*',
+        schema: 'public',
+        table: 'maintenance_items',
+      }, () => {
+        router.refresh()
+      })
+      .subscribe((status: string) => setIsLive(status === 'SUBSCRIBED'))
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   const filteredItems = statusFilter === 'all' ? items : items.filter(i => i.status === statusFilter)
 
@@ -81,6 +101,20 @@ export default function DashboardClient({ projects, items }: Props) {
 
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
+      {/* Live indicator */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
+          <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
+        </div>
+        {totalAwaitingConfirm > 0 && (
+          <Link href="/sign-off" className="btn btn-secondary" style={{ fontSize: 13, padding: '4px 12px' }}>
+            <Clock size={13} style={{ color: '#9a6700' }} />
+            {totalAwaitingConfirm} awaiting sign-off
+          </Link>
+        )}
+      </div>
+
       {/* Summary stats */}
       <div className="stat-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
         <StatCard value={totalOpen} label="Open items" color="#37352f" />

@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Menu,
   LogOut,
+  CheckCheck,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/maintenance',  label: 'Maintenance',  icon: Wrench },
   { href: '/contractors',  label: 'Contractors',  icon: Users },
   { href: '/work-orders',  label: 'Work Orders',  icon: ClipboardList },
+  { href: '/sign-off',     label: 'Sign-off',     icon: CheckCheck },
   { href: '/settings',     label: 'Settings',     icon: Settings },
 ]
 
