@@ -8,7 +8,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, description, emoji, actions, breadcrumbs }: PageHeaderProps) {
   return (
-    <div style={{ padding: '28px 32px 0', borderBottom: '1px solid #e9e9e7', marginBottom: 0 }}>
+    <div className="page-header" style={{ borderBottom: '1px solid #e9e9e7', marginBottom: 0 }}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav style={{ display: 'flex', gap: 6, fontSize: 13, color: '#787774', marginBottom: 8 }}>
           {breadcrumbs.map((crumb, i) => (
@@ -27,7 +27,7 @@ export default function PageHeader({ title, description, emoji, actions, breadcr
           ))}
         </nav>
       )}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingBottom: 20 }}>
+      <div className="page-header-row">
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#37352f', margin: 0 }}>
             {emoji && <span style={{ marginRight: 8 }}>{emoji}</span>}

@@ -42,12 +42,12 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile hamburger */}
+      {/* Mobile hamburger — visible only on mobile via .mobile-only CSS class */}
       <button
-        className="btn btn-ghost"
+        className="btn btn-ghost mobile-only"
         onClick={() => setMobileOpen(true)}
-        style={{ display: 'none', position: 'fixed', top: 12, left: 12, zIndex: 50 }}
-        id="mobile-menu-btn"
+        style={{ position: 'fixed', top: 12, left: 12, zIndex: 50 }}
+        aria-label="Open menu"
       >
         <Menu size={20} />
       </button>

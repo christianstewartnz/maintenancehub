@@ -77,7 +77,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const workOrder = item.work_order as any
 
   return (
-    <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
+    <div className="page-content item-detail-grid" style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
       {/* Main content */}
       <div>
         {/* Title & status */}

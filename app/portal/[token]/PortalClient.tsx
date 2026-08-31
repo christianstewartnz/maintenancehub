@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime } from '@/lib/utils'
 import type { MaintenanceStatus } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Paperclip } from 'lucide-react'
 
 interface Props {
   contractor: { id: string; company_name: string; contact_name: string | null }
@@ -70,6 +70,11 @@ function ItemRow({
                 <MessageSquare size={11} /> {item.comments.length}
               </span>
             )}
+            {item.attachments?.length > 0 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#a0a09e' }}>
+                <Paperclip size={11} /> {item.attachments.length}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#37352f' }}>{item.title}</div>
         </div>
@@ -83,6 +88,51 @@ function ItemRow({
         <div style={{ borderTop: '1px solid #f0f0ee', padding: '14px 14px' }}>
           {item.description && (
             <p style={{ margin: '0 0 14px', fontSize: 14, color: '#37352f', whiteSpace: 'pre-wrap' }}>{item.description}</p>
+          )}
+
+          {item.attachments?.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Attachments
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {item.attachments.map((att: any) => {
+                  const isImage = att.file_type?.startsWith('image/')
+                  return (
+                    <a
+                      key={att.id}
+                      href={att.file_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      style={{ display: 'block', textDecoration: 'none' }}
+                    >
+                      {isImage ? (
+                        <img
+                          src={att.file_url}
+                          alt={att.file_name}
+                          style={{
+                            width: 100, height: 100, objectFit: 'cover',
+                            borderRadius: 6, border: '1px solid #e9e9e7',
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: 100, height: 100, borderRadius: 6,
+                          border: '1px solid #e9e9e7', background: '#f7f7f5',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          justifyContent: 'center', gap: 6, padding: 8,
+                        }}>
+                          <Paperclip size={20} style={{ color: '#a0a09e' }} />
+                          <span style={{ fontSize: 10, color: '#787774', textAlign: 'center', wordBreak: 'break-all', lineHeight: 1.3 }}>
+                            {att.file_name}
+                          </span>
+                        </div>
+                      )}
+                    </a>
+                  )
+                })}
+              </div>
+            </div>
           )}
 
           {(item.status === 'assigned' || item.status === 'in_progress') && (

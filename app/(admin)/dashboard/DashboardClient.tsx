@@ -80,9 +80,9 @@ export default function DashboardClient({ projects, items }: Props) {
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Summary stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+      <div className="stat-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
         <StatCard value={totalOpen} label="Open items" color="#37352f" />
         <StatCard value={totalOverdue} label="Overdue (14+ days)" color="#e03c3c" icon={<AlertTriangle size={16} />} />
         <StatCard value={totalAwaitingConfirm} label="Awaiting confirmation" color="#9a6700" icon={<Clock size={16} />} />

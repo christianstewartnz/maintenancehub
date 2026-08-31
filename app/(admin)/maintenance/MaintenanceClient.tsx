@@ -56,7 +56,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>

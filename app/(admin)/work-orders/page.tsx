@@ -24,7 +24,7 @@ export default async function WorkOrdersPage() {
           <Link href="/work-orders/new" className="btn btn-primary"><Plus size={16} /> New Work Order</Link>
         }
       />
-      <div style={{ padding: '24px 32px' }}>
+      <div className="page-content" style={{ padding: '24px 32px' }}>
         {!workOrders?.length ? (
           <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No work orders yet</p>

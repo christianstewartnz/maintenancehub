@@ -40,9 +40,9 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Info cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+      <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
         <InfoCard title="Project">
           <Link href={`/projects/${project?.id}`} style={{ color: '#2383e2', textDecoration: 'none', fontWeight: 500 }}>
             {project?.name}
