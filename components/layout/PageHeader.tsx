@@ -15,9 +15,7 @@ export default function PageHeader({ title, description, emoji, actions, breadcr
             <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {i > 0 && <span>/</span>}
               {crumb.href ? (
-                <a href={crumb.href} style={{ color: '#787774', textDecoration: 'none' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#37352f')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#787774')}>
+                <a href={crumb.href} className="breadcrumb-link">
                   {crumb.label}
                 </a>
               ) : (

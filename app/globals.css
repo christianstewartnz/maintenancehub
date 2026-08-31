@@ -271,6 +271,8 @@ select.input {
 /* ── Page header ────────────────────────────────────────────────────── */
 .page-header { padding: 28px 32px 0; }
 .page-header-row { display: flex; align-items: flex-start; justify-content: space-between; padding-bottom: 20px; }
+.breadcrumb-link { color: #787774; text-decoration: none; }
+.breadcrumb-link:hover { color: #37352f; }
 
 /* ── Skeleton loading ───────────────────────────────────────────────── */
 .skeleton {
