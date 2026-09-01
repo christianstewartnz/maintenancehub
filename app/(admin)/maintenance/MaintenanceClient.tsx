@@ -36,7 +36,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     if (filterContractor) result = result.filter(i => i.contractor_id === filterContractor)
 
     const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
-    const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, confirmed: 4, complete: 5 }
+    const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
 
     if (sortBy === 'priority') result.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
     else if (sortBy === 'status') result.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
@@ -69,7 +69,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
           <option value="">All Status</option>
-          {(['logged','assigned','in_progress','contractor_complete','confirmed','complete'] as MaintenanceStatus[]).map(s => (
+          {(['logged','assigned','in_progress','contractor_complete','complete'] as MaintenanceStatus[]).map(s => (
             <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
           ))}
         </select>

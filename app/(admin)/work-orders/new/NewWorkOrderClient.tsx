@@ -37,7 +37,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
       .eq('contractor_id', contractorId)
       .eq('unit.project_id', projectId)
       .is('work_order_id', null)
-      .not('status', 'in', '("complete","confirmed")')
+      .not('status', 'in', '("complete")')
       .order('created_at')
       .then(({ data }) => {
         setAvailableItems(data ?? [])

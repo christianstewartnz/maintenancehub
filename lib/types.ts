@@ -1,5 +1,5 @@
 export type ProjectStatus = 'active' | 'archived'
-export type MaintenanceStatus = 'logged' | 'assigned' | 'in_progress' | 'contractor_complete' | 'confirmed' | 'complete'
+export type MaintenanceStatus = 'logged' | 'assigned' | 'in_progress' | 'contractor_complete' | 'complete'
 export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 export type WorkOrderStatus = 'draft' | 'sent' | 'in_progress' | 'complete'
 export type ReportFrequency = 'daily' | 'weekly' | 'none'

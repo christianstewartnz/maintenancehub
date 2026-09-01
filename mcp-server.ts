@@ -48,7 +48,7 @@ server.tool(
   'list_maintenance_items',
   'List maintenance items with optional filters',
   {
-    status: z.enum(['logged', 'assigned', 'in_progress', 'contractor_complete', 'confirmed', 'complete', 'all']).optional().describe('Filter by status'),
+    status: z.enum(['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete', 'all']).optional().describe('Filter by status'),
     project_id: z.string().optional().describe('Filter by project ID'),
     priority: z.enum(['low', 'medium', 'high', 'urgent']).optional().describe('Filter by priority'),
     limit: z.number().min(1).max(100).optional().describe('Max results (default 20)'),
@@ -122,7 +122,6 @@ server.tool(
       `  Assigned:             ${byStatus('assigned')}`,
       `  In progress:          ${byStatus('in_progress')}`,
       `  Contractor complete:  ${byStatus('contractor_complete')}`,
-      `  Confirmed:            ${byStatus('confirmed')}`,
       `  Complete:             ${byStatus('complete')}`,
       ``,
       `Overdue (>14 days open): ${overdue}`,

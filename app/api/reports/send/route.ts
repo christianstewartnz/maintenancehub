@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       { label: 'Logged', value: byStatus('logged') },
       { label: 'In Progress', value: byStatus('in_progress') + byStatus('assigned') },
       { label: 'Awaiting Inspection', value: byStatus('contractor_complete') },
-      { label: 'Complete', value: byStatus('complete') + byStatus('confirmed') },
+      { label: 'Complete', value: byStatus('complete') },
     ]
 
     // Overdue: logged/assigned/in_progress items older than 14 days
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
 
     // Recently completed: completed_at within period
     const recentlyCompleted = items
-      .filter(i => ['complete', 'confirmed'].includes(i.status) && i.completed_at && new Date(i.completed_at) >= periodStart)
+      .filter(i => i.status === 'complete' && i.completed_at && new Date(i.completed_at) >= periodStart)
       .map(i => {
         const unit = i.unit as any
         const project = unit?.project as any

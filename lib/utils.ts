@@ -40,7 +40,6 @@ export const STATUS_LABELS: Record<MaintenanceStatus, string> = {
   assigned: 'Assigned',
   in_progress: 'In Progress',
   contractor_complete: 'Contractor Complete',
-  confirmed: 'Confirmed',
   complete: 'Complete',
 }
 
@@ -49,7 +48,6 @@ export const STATUS_COLORS: Record<MaintenanceStatus, string> = {
   assigned: 'badge-blue',
   in_progress: 'badge-amber',
   contractor_complete: 'badge-orange',
-  confirmed: 'badge-green-light',
   complete: 'badge-green',
 }
 
@@ -79,7 +77,6 @@ export const STATUS_FLOW: MaintenanceStatus[] = [
   'assigned',
   'in_progress',
   'contractor_complete',
-  'confirmed',
   'complete',
 ]
 

@@ -125,7 +125,7 @@ export default function DashboardClient({ projects, items }: Props) {
       {/* Filter bar */}
       <div className="filter-bar" style={{ marginBottom: 20 }}>
         <span style={{ fontSize: 13, color: '#787774', marginRight: 4 }}>Filter:</span>
-        {(['all', 'logged', 'assigned', 'in_progress', 'contractor_complete', 'confirmed'] as const).map(s => (
+        {(['all', 'logged', 'assigned', 'in_progress', 'contractor_complete'] as const).map(s => (
           <button
             key={s}
             className={`btn ${statusFilter === s ? 'btn-primary' : 'btn-secondary'}`}

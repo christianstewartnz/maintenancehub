@@ -75,12 +75,12 @@ export default function SignOffClient({ items: initial }: Props) {
     setConfirming(prev => new Set(prev).add(itemId))
     await supabase
       .from('maintenance_items')
-      .update({ status: 'confirmed' })
+      .update({ status: 'complete' })
       .eq('id', itemId)
     await supabase.from('activity_log').insert({
       maintenance_item_id: itemId,
       action: 'status_changed',
-      details: { from: 'contractor_complete', to: 'confirmed' },
+      details: { from: 'contractor_complete', to: 'complete' },
       performed_by: 'admin',
     })
     setItems(prev => prev.filter(i => i.id !== itemId))
@@ -117,12 +117,12 @@ export default function SignOffClient({ items: initial }: Props) {
     const ids = items.map(i => i.id)
     await supabase
       .from('maintenance_items')
-      .update({ status: 'confirmed' })
+      .update({ status: 'complete' })
       .in('id', ids)
     const logs = ids.map(id => ({
       maintenance_item_id: id,
       action: 'status_changed',
-      details: { from: 'contractor_complete', to: 'confirmed' },
+      details: { from: 'contractor_complete', to: 'complete' },
       performed_by: 'admin',
     }))
     await supabase.from('activity_log').insert(logs)
