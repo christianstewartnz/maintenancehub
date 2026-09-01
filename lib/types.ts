@@ -40,6 +40,7 @@ export interface Contractor {
   phone: string | null
   portal_token: string
   notes: string | null
+  is_active: boolean
   created_at: string
   updated_at: string
 }

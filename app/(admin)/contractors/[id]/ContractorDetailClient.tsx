@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Copy, Check, ExternalLink } from 'lucide-react'
+import { Copy, Check, ExternalLink, Archive, ArchiveRestore } from 'lucide-react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import type { Contractor } from '@/lib/types'
 
 interface Props {
@@ -13,14 +15,32 @@ interface Props {
   items: any[]
 }
 
-export default function ContractorDetailClient({ contractor, assignments, items }: Props) {
+export default function ContractorDetailClient({ contractor: initial, assignments, items }: Props) {
+  const [contractor, setContractor] = useState(initial)
   const [copied, setCopied] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+  const supabase = createClient()
+  const router = useRouter()
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal/${contractor.portal_token}` : `/portal/${contractor.portal_token}`
 
   function copyLink() {
     navigator.clipboard.writeText(portalUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function toggleArchive() {
+    setArchiving(true)
+    const newActive = !contractor.is_active
+    const { data } = await supabase
+      .from('contractors')
+      .update({ is_active: newActive })
+      .eq('id', contractor.id)
+      .select()
+      .single()
+    if (data) setContractor(data)
+    setArchiving(false)
+    router.refresh()
   }
 
   const openItems = items.filter(i => i.status !== 'complete')
@@ -108,6 +128,23 @@ export default function ContractorDetailClient({ contractor, assignments, items 
             ))}
           </div>
         )}
+
+        <div style={{ border: `1px solid ${contractor.is_active ? '#e9e9e7' : '#f0d4d4'}`, borderRadius: 8, padding: '14px 16px', background: contractor.is_active ? 'white' : '#fff8f8' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</h4>
+          <p style={{ fontSize: 13, color: '#787774', margin: '0 0 10px' }}>
+            {contractor.is_active ? 'Active — visible across the app.' : 'Archived — hidden from new items.'}
+          </p>
+          <button
+            className={`btn ${contractor.is_active ? 'btn-secondary' : 'btn-primary'}`}
+            style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
+            onClick={toggleArchive}
+            disabled={archiving}
+          >
+            {contractor.is_active
+              ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive Contractor'}</>
+              : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore Contractor'}</>}
+          </button>
+        </div>
       </div>
     </div>
   )

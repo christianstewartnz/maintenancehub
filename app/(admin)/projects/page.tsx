@@ -11,8 +11,7 @@ export default async function ProjectsPage() {
     .from('projects')
     .select(`
       *,
-      units:units(count),
-      maintenance_items:maintenance_items(count)
+      units:units(count)
     `)
     .order('name')
 

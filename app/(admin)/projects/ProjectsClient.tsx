@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import type { Project } from '@/lib/types'
 
 interface Props {
-  projects: (Project & { units: { count: number }[]; maintenance_items: { count: number }[] })[]
+  projects: (Project & { units: { count: number }[] })[]
 }
 
 export default function ProjectsClient({ projects: initial }: Props) {
@@ -24,11 +24,12 @@ export default function ProjectsClient({ projects: initial }: Props) {
     setSaving(true)
     const { data, error } = await supabase
       .from('projects')
-      .insert({ name: form.name, address: form.address || null, description: form.description || null })
+      .insert({ name: form.name, address: form.address || null, description: form.description || null, status: 'active' as const })
       .select()
       .single()
 
     if (!error && data) {
+      setProjects(prev => [...prev, { ...data, units: [{ count: 0 }] }])
       setShowModal(false)
       setForm({ name: '', address: '', description: '' })
       router.refresh()
@@ -125,7 +126,6 @@ function ProjectList({ title, projects, style }: { title: string; projects: any[
               {p.address && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
               <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 13, color: '#787774' }}>
                 <span>{p.units?.[0]?.count ?? 0} units</span>
-                <span>{p.maintenance_items?.[0]?.count ?? 0} items</span>
               </div>
             </div>
           </Link>

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Plus, Upload, Download, Trash2, UserPlus } from 'lucide-react'
+import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
@@ -20,16 +20,32 @@ interface Props {
 
 type Tab = 'units' | 'trades' | 'work-orders'
 
-export default function ProjectDetailClient({ project, units: initialUnits, trades, contractors, assignments: initialAssignments, workOrders }: Props) {
+export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades, contractors, assignments: initialAssignments, workOrders }: Props) {
+  const [project, setProject] = useState(initialProject)
   const [tab, setTab] = useState<Tab>('units')
   const [units, setUnits] = useState(initialUnits)
   const [assignments, setAssignments] = useState(initialAssignments)
   const [showUnitModal, setShowUnitModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState<Trade | null>(null)
   const [saving, setSaving] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
+
+  async function toggleArchive() {
+    setArchiving(true)
+    const newStatus = project.status === 'active' ? 'archived' : 'active'
+    const { data } = await supabase
+      .from('projects')
+      .update({ status: newStatus })
+      .eq('id', project.id)
+      .select()
+      .single()
+    if (data) setProject(data)
+    setArchiving(false)
+    router.refresh()
+  }
 
   const [unitForm, setUnitForm] = useState({
     unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '',
@@ -92,23 +108,35 @@ export default function ProjectDetailClient({ project, units: initialUnits, trad
 
   return (
     <div style={{ padding: '0 32px 32px' }}>
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e9e9e7', marginBottom: 24, marginTop: 20 }}>
-        {(['units', 'trades', 'work-orders'] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: tab === t ? 600 : 400,
-              color: tab === t ? '#37352f' : '#787774',
-              borderBottom: tab === t ? '2px solid #37352f' : '2px solid transparent',
-              marginBottom: -1,
-            }}
-          >
-            {t === 'units' ? `Units (${units.length})` : t === 'trades' ? `Trades (${trades.length})` : `Work Orders (${workOrders.length})`}
-          </button>
-        ))}
+      {/* Tabs + archive */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e9e9e7', marginBottom: 24, marginTop: 20 }}>
+        <div style={{ display: 'flex', gap: 0, flex: 1 }}>
+          {(['units', 'trades', 'work-orders'] as Tab[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: tab === t ? 600 : 400,
+                color: tab === t ? '#37352f' : '#787774',
+                borderBottom: tab === t ? '2px solid #37352f' : '2px solid transparent',
+                marginBottom: -1,
+              }}
+            >
+              {t === 'units' ? `Units (${units.length})` : t === 'trades' ? `Trades (${trades.length})` : `Work Orders (${workOrders.length})`}
+            </button>
+          ))}
+        </div>
+        <button
+          className="btn btn-ghost"
+          style={{ fontSize: 13, color: '#787774', marginBottom: 4, gap: 6 }}
+          onClick={toggleArchive}
+          disabled={archiving}
+        >
+          {project.status === 'active'
+            ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive Project'}</>
+            : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore Project'}</>}
+        </button>
       </div>
 
       {/* ── Units tab ── */}

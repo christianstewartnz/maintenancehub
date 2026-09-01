@@ -122,12 +122,17 @@ export default function SignOffClient({ items: initial }: Props) {
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Toolbar */}
-      {items.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
-            <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
+          <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
+          {items.length > 0 && (
+            <span style={{ fontSize: 12, color: '#787774' }}>
+              · {items.length} item{items.length !== 1 ? 's' : ''} awaiting
+            </span>
+          )}
+        </div>
+        {items.length > 0 && (
           <button
             className="btn btn-primary"
             onClick={confirmAll}
@@ -136,8 +141,8 @@ export default function SignOffClient({ items: initial }: Props) {
             <CheckCheck size={15} />
             {bulkConfirming ? 'Confirming…' : `Confirm All ${items.length}`}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {items.length === 0 ? (
         <div className="empty-state">

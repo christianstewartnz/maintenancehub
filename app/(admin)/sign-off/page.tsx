@@ -42,11 +42,7 @@ export default async function SignOffPage() {
       <PageHeader
         emoji="✅"
         title="Sign-off Queue"
-        description={
-          enriched.length === 0
-            ? 'No items awaiting confirmation'
-            : `${enriched.length} item${enriched.length !== 1 ? 's' : ''} awaiting confirmation — oldest first`
-        }
+        description="Contractor-complete items awaiting your confirmation"
       />
       <SignOffClient items={enriched} />
     </div>
