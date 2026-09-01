@@ -12,6 +12,7 @@ interface Props { contractors: Contractor[] }
 export default function ContractorsClient({ contractors: initial }: Props) {
   const [contractors, setContractors] = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [saving, setSaving] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [form, setForm] = useState({ company_name: '', contact_name: '', email: '', phone: '', notes: '' })
@@ -63,16 +64,26 @@ export default function ContractorsClient({ contractors: initial }: Props) {
             onCopy={copyPortalLink}
           />
           {contractors.some(c => c.is_active === false) && (
-            <div style={{ marginTop: 32 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-                Archived ({contractors.filter(c => c.is_active === false).length})
-              </h2>
-              <ContractorTable
-                contractors={contractors.filter(c => c.is_active === false)}
-                copiedId={copiedId}
-                onCopy={copyPortalLink}
-                dimmed
-              />
+            <div style={{ marginTop: 24 }}>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 13, color: '#787774', padding: '4px 0' }}
+                onClick={() => setShowArchived(s => !s)}
+              >
+                {showArchived
+                  ? `Hide archived (${contractors.filter(c => c.is_active === false).length})`
+                  : `Show archived (${contractors.filter(c => c.is_active === false).length})`}
+              </button>
+              {showArchived && (
+                <div style={{ marginTop: 12, opacity: 0.6 }}>
+                  <ContractorTable
+                    contractors={contractors.filter(c => c.is_active === false)}
+                    copiedId={copiedId}
+                    onCopy={copyPortalLink}
+                    dimmed
+                  />
+                </div>
+              )}
             </div>
           )}
         </>

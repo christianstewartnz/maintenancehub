@@ -14,6 +14,7 @@ interface Props {
 export default function ProjectsClient({ projects: initial }: Props) {
   const [projects, setProjects] = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [form, setForm] = useState({ name: '', address: '', description: '' })
   const [saving, setSaving] = useState(false)
   const router = useRouter()
@@ -48,7 +49,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
         </button>
       </div>
 
-      {projects.length === 0 ? (
+      {activeProjects.length === 0 && archivedProjects.length === 0 ? (
         <div className="empty-state">
           <Building2 size={40} style={{ marginBottom: 12, color: '#d0d0d0' }} />
           <p style={{ fontSize: 16, fontWeight: 500 }}>No projects yet</p>
@@ -59,9 +60,18 @@ export default function ProjectsClient({ projects: initial }: Props) {
         </div>
       ) : (
         <>
-          <ProjectList title="Active Projects" projects={activeProjects} />
+          <ProjectList projects={activeProjects} />
           {archivedProjects.length > 0 && (
-            <ProjectList title="Archived Projects" projects={archivedProjects} style={{ marginTop: 32 }} />
+            <div style={{ marginTop: 24 }}>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 13, color: '#787774', padding: '4px 0' }}
+                onClick={() => setShowArchived(s => !s)}
+              >
+                {showArchived ? `Hide archived (${archivedProjects.length})` : `Show archived (${archivedProjects.length})`}
+              </button>
+              {showArchived && <ProjectList projects={archivedProjects} style={{ marginTop: 12, opacity: 0.6 }} />}
+            </div>
           )}
         </>
       )}
@@ -103,12 +113,9 @@ export default function ProjectsClient({ projects: initial }: Props) {
   )
 }
 
-function ProjectList({ title, projects, style }: { title: string; projects: any[]; style?: React.CSSProperties }) {
+function ProjectList({ projects, style }: { projects: any[]; style?: React.CSSProperties }) {
   return (
     <div style={style}>
-      <h2 style={{ fontSize: 13, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-        {title} ({projects.length})
-      </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
         {projects.map(p => (
           <Link key={p.id} href={`/projects/${p.id}`} style={{ textDecoration: 'none' }}>
