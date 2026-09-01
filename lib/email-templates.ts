@@ -1,3 +1,79 @@
+export function maintenanceDueEmail(opts: {
+  upcomingUnits: { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }[]
+  overdueUnits: { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }[]
+  appUrl: string
+}): { subject: string; html: string } {
+  const { upcomingUnits, overdueUnits, appUrl } = opts
+
+  const upcomingRows = upcomingUnits.map(u => `
+    <tr style="border-top: 1px solid #e9e9e7;">
+      <td style="padding: 8px 0; font-size: 14px; font-weight: 500;">${u.unitIdentifier}</td>
+      <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.projectName}</td>
+      <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.settlementDate}</td>
+      <td style="padding: 8px 0; font-size: 13px; font-weight: 600; color: ${u.daysUntilDue <= 3 ? '#eb5757' : '#d09c3a'};">${u.dueDate} (${u.daysUntilDue}d)</td>
+    </tr>
+  `).join('')
+
+  const overdueRows = overdueUnits.map(u => `
+    <tr style="border-top: 1px solid #e9e9e7;">
+      <td style="padding: 8px 0; font-size: 14px; font-weight: 500;">${u.unitIdentifier}</td>
+      <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.projectName}</td>
+      <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.settlementDate}</td>
+      <td style="padding: 8px 0; font-size: 13px; font-weight: 600; color: #eb5757;">${u.dueDate} (${u.daysOverdue}d overdue)</td>
+    </tr>
+  `).join('')
+
+  const totalCount = upcomingUnits.length + overdueUnits.length
+  const subjectParts = []
+  if (overdueUnits.length > 0) subjectParts.push(`${overdueUnits.length} overdue`)
+  if (upcomingUnits.length > 0) subjectParts.push(`${upcomingUnits.length} upcoming`)
+
+  return {
+    subject: `Maintenance forms due — ${subjectParts.join(', ')} (${totalCount} unit${totalCount !== 1 ? 's' : ''})`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 640px; color: #37352f;">
+        <h2 style="margin-bottom: 4px;">3-Month Maintenance Forms Due</h2>
+        <p style="color: #787774; margin-top: 0;">Units approaching or past their 90-day defect maintenance date</p>
+        <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
+
+        ${overdueUnits.length > 0 ? `
+        <h3 style="margin: 0 0 12px; font-size: 15px; color: #eb5757;">Overdue (${overdueUnits.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+          <thead>
+            <tr>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Unit</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Project</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Settlement</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Due Date</th>
+            </tr>
+          </thead>
+          <tbody>${overdueRows}</tbody>
+        </table>
+        ` : ''}
+
+        ${upcomingUnits.length > 0 ? `
+        <h3 style="margin: 0 0 12px; font-size: 15px; color: #d09c3a;">Upcoming — Next 14 Days (${upcomingUnits.length})</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+          <thead>
+            <tr>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Unit</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Project</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Settlement</th>
+              <th style="text-align: left; font-size: 12px; color: #787774; padding-bottom: 6px;">Due Date</th>
+            </tr>
+          </thead>
+          <tbody>${upcomingRows}</tbody>
+        </table>
+        ` : ''}
+
+        <a href="${appUrl}/projects" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500;">Open Maintenance Hub</a>
+        <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 24px 0;" />
+        <p style="color: #787774; font-size: 12px;">Sent daily when maintenance forms are due within 14 days or overdue · Maintenance Hub</p>
+      </div>
+    `,
+  }
+}
+
 export function contractorCompleteEmail(opts: {
   itemTitle: string
   itemNumber: string

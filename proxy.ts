@@ -27,8 +27,8 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Portal routes are public — no auth needed
-  if (pathname.startsWith('/portal')) {
+  // Public routes — no auth needed
+  if (pathname.startsWith('/portal') || pathname.startsWith('/api/')) {
     return supabaseResponse
   }
 

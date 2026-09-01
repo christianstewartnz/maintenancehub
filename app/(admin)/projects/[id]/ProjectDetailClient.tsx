@@ -49,17 +49,36 @@ export default function ProjectDetailClient({ project: initialProject, units: in
 
   const [unitForm, setUnitForm] = useState({
     unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '',
-    owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '', notes: '',
+    owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '',
+    settlement_date: '', notes: '',
   })
+
+  function maintenanceDueDate(settlementDate: string | null): string {
+    if (!settlementDate) return '—'
+    const d = new Date(settlementDate)
+    d.setDate(d.getDate() + 90)
+    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  function dueDateStatus(settlementDate: string | null): string {
+    if (!settlementDate) return ''
+    const due = new Date(settlementDate)
+    due.setDate(due.getDate() + 90)
+    const days = Math.ceil((due.getTime() - Date.now()) / 86400000)
+    if (days < 0) return '#eb5757'
+    if (days <= 14) return '#d09c3a'
+    return '#787774'
+  }
 
   async function handleCreateUnit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const { data, error } = await supabase.from('units').insert({ project_id: project.id, ...unitForm }).select().single()
+    const insertData = { ...unitForm, settlement_date: unitForm.settlement_date || null }
+    const { data, error } = await supabase.from('units').insert({ project_id: project.id, ...insertData }).select().single()
     if (!error && data) {
       setUnits(u => [...u, data].sort((a, b) => a.unit_identifier.localeCompare(b.unit_identifier)))
       setShowUnitModal(false)
-      setUnitForm({ unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '', owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '', notes: '' })
+      setUnitForm({ unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '', owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '', settlement_date: '', notes: '' })
     }
     setSaving(false)
   }
@@ -80,7 +99,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   }
 
   function downloadTemplate() {
-    const csv = 'unit_identifier,lot_number,address,owner_name,owner_email,owner_phone,access_contact_name,access_contact_email,access_contact_phone,notes\n'
+    const csv = 'unit_identifier,lot_number,address,owner_name,owner_email,owner_phone,access_contact_name,access_contact_email,access_contact_phone,settlement_date,notes\n'
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -161,6 +180,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                   <tr>
                     <th>Unit ID</th><th>Lot</th><th>Address</th>
                     <th>Owner</th><th>Owner Contact</th><th>Access Contact</th>
+                    <th>Settlement</th><th>Maint. Due</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,6 +192,8 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td>{u.owner_name ?? '—'}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.owner_email ?? ''}{u.owner_phone ? ` · ${u.owner_phone}` : ''}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
+                      <td style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                      <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -258,6 +280,16 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 <Field label="Access Contact Name"><input className="input" value={unitForm.access_contact_name} onChange={e => setUnitForm(f => ({ ...f, access_contact_name: e.target.value }))} /></Field>
                 <Field label="Access Contact Email"><input className="input" type="email" value={unitForm.access_contact_email} onChange={e => setUnitForm(f => ({ ...f, access_contact_email: e.target.value }))} /></Field>
                 <Field label="Access Contact Phone"><input className="input" value={unitForm.access_contact_phone} onChange={e => setUnitForm(f => ({ ...f, access_contact_phone: e.target.value }))} /></Field>
+                <Field label="Settlement Date" style={{ gridColumn: 'span 2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <input className="input" type="date" value={unitForm.settlement_date} onChange={e => setUnitForm(f => ({ ...f, settlement_date: e.target.value }))} style={{ flex: 1 }} />
+                    {unitForm.settlement_date && (
+                      <span style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>
+                        Maint. due: <strong style={{ color: '#37352f' }}>{maintenanceDueDate(unitForm.settlement_date)}</strong>
+                      </span>
+                    )}
+                  </div>
+                </Field>
                 <Field label="Notes" style={{ gridColumn: 'span 2' }}><textarea className="input" value={unitForm.notes} onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} /></Field>
               </div>
               <div className="modal-footer">

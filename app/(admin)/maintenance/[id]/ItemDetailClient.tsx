@@ -145,6 +145,18 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
           <Row label="Unit" value={unit?.unit_identifier} />
           <Row label="Lot" value={unit?.lot_number} />
           <Row label="Address" value={unit?.address} />
+          {unit?.settlement_date && (() => {
+            const due = new Date(unit.settlement_date)
+            due.setDate(due.getDate() + 90)
+            const daysUntil = Math.ceil((due.getTime() - Date.now()) / 86400000)
+            const dueStr = due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+            const color = daysUntil < 0 ? '#eb5757' : daysUntil <= 14 ? '#d09c3a' : undefined
+            return <>
+              <div style={{ borderTop: '1px solid #f1f1ef', margin: '8px 0' }} />
+              <Row label="Settlement" value={new Date(unit.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })} />
+              <Row label="Maint. Due" value={`${dueStr}${daysUntil < 0 ? ` (${Math.abs(daysUntil)}d overdue)` : daysUntil <= 14 ? ` (${daysUntil}d)` : ''}`} valueColor={color} />
+            </>
+          })()}
         </InfoCard>
 
         <InfoCard title="Owner / Access">
@@ -213,12 +225,12 @@ function InfoCard({ title, children }: { title: string; children: React.ReactNod
   )
 }
 
-function Row({ label, value, href }: { label: string; value?: string | null; href?: string }) {
+function Row({ label, value, href, valueColor }: { label: string; value?: string | null; href?: string; valueColor?: string }) {
   if (!value) return null
   return (
     <div style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 4 }}>
       <span style={{ color: '#787774', minWidth: 60, flexShrink: 0 }}>{label}</span>
-      {href ? <a href={href} style={{ color: '#2383e2', textDecoration: 'none' }}>{value}</a> : <span style={{ color: '#37352f' }}>{value}</span>}
+      {href ? <a href={href} style={{ color: '#2383e2', textDecoration: 'none' }}>{value}</a> : <span style={{ color: valueColor ?? '#37352f', fontWeight: valueColor ? 500 : undefined }}>{value}</span>}
     </div>
   )
 }
