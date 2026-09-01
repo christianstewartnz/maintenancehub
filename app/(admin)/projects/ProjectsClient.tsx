@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, Building2, ChevronRight } from 'lucide-react'
+import { Plus, Building2, ChevronRight, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Project } from '@/lib/types'
@@ -14,8 +14,10 @@ interface Props {
 export default function ProjectsClient({ projects: initial }: Props) {
   const [projects, setProjects] = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [form, setForm] = useState({ name: '', address: '', description: '' })
+  const [editForm, setEditForm] = useState({ name: '', address: '', description: '' })
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -36,6 +38,32 @@ export default function ProjectsClient({ projects: initial }: Props) {
       router.refresh()
     }
     setSaving(false)
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingProject) return
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('projects')
+      .update({ name: editForm.name, address: editForm.address || null, description: editForm.description || null })
+      .eq('id', editingProject.id)
+      .select()
+      .single()
+
+    if (!error && data) {
+      setProjects(prev => prev.map(p => p.id === data.id ? { ...p, ...data } : p))
+      setEditingProject(null)
+      router.refresh()
+    }
+    setSaving(false)
+  }
+
+  function openEdit(p: Project, e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setEditForm({ name: p.name, address: p.address ?? '', description: p.description ?? '' })
+    setEditingProject(p)
   }
 
   const activeProjects = projects.filter(p => p.status === 'active')
@@ -60,7 +88,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
         </div>
       ) : (
         <>
-          <ProjectList projects={activeProjects} />
+          <ProjectList projects={activeProjects} onEdit={openEdit} />
           {archivedProjects.length > 0 && (
             <div style={{ marginTop: 24 }}>
               <button
@@ -70,7 +98,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
               >
                 {showArchived ? `Hide archived (${archivedProjects.length})` : `Show archived (${archivedProjects.length})`}
               </button>
-              {showArchived && <ProjectList projects={archivedProjects} style={{ marginTop: 12, opacity: 0.6 }} />}
+              {showArchived && <ProjectList projects={archivedProjects} onEdit={openEdit} style={{ marginTop: 12, opacity: 0.6 }} />}
             </div>
           )}
         </>
@@ -109,26 +137,70 @@ export default function ProjectsClient({ projects: initial }: Props) {
           </div>
         </div>
       )}
+
+      {/* Edit modal */}
+      {editingProject && (
+        <div className="modal-overlay" onClick={() => setEditingProject(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Edit Project</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setEditingProject(null)}>✕</button>
+            </div>
+            <form onSubmit={handleEdit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={labelStyle}>Project name *</label>
+                  <input className="input" required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Richmond Villas" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Address</label>
+                  <input className="input" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} placeholder="General project address" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Description</label>
+                  <textarea className="input" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional notes about this project" />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingProject(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function ProjectList({ projects, style }: { projects: any[]; style?: React.CSSProperties }) {
+function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p: any, e: React.MouseEvent) => void; style?: React.CSSProperties }) {
   return (
     <div style={style}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
         {projects.map(p => (
           <Link key={p.id} href={`/projects/${p.id}`} style={{ textDecoration: 'none' }}>
-            <div style={{
-              border: '1px solid #e9e9e7', borderRadius: 8, padding: '16px 18px',
-              background: 'white', transition: 'box-shadow 0.15s, border-color 0.15s', cursor: 'pointer',
-            }}
+            <div
+              style={{
+                border: '1px solid #e9e9e7', borderRadius: 8, padding: '16px 18px',
+                background: 'white', transition: 'box-shadow 0.15s, border-color 0.15s', cursor: 'pointer',
+              }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#d0d0d0'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#e9e9e7'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#37352f' }}>{p.name}</h3>
-                <ChevronRight size={16} style={{ color: '#b0aea8', flexShrink: 0, marginTop: 2 }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <button
+                    onClick={e => onEdit(p, e)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b0aea8', padding: '2px 4px', borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                    title="Edit project"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <ChevronRight size={16} style={{ color: '#b0aea8', flexShrink: 0 }} />
+                </div>
               </div>
               {p.address && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
               <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 13, color: '#787774' }}>

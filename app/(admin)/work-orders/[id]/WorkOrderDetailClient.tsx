@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { WorkOrderStatusBadge, StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
-import { Download, Send } from 'lucide-react'
+import { Download, Send, Pencil, Check, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   workOrder: any
@@ -17,7 +18,11 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesValue, setNotesValue] = useState(initial.notes ?? '')
+  const [savingNotes, setSavingNotes] = useState(false)
   const router = useRouter()
+  const supabase = createClient()
 
   const project = workOrder.project
   const contractor = workOrder.contractor
@@ -37,6 +42,21 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
     setSuccess(`Work order sent to ${contractor?.email}`)
     setSending(false)
     router.refresh()
+  }
+
+  async function handleSaveNotes() {
+    setSavingNotes(true)
+    const { data } = await supabase
+      .from('work_orders')
+      .update({ notes: notesValue || null })
+      .eq('id', workOrder.id)
+      .select()
+      .single()
+    if (data) {
+      setWorkOrder((prev: any) => ({ ...prev, notes: data.notes }))
+      setEditingNotes(false)
+    }
+    setSavingNotes(false)
   }
 
   return (
@@ -68,15 +88,46 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
         </InfoCard>
       </div>
 
-      {/* Notes */}
-      {workOrder.notes && (
-        <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '12px 16px', marginBottom: 24 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
-            Notes
-          </div>
-          <p style={{ margin: 0, fontSize: 14, whiteSpace: 'pre-wrap', color: '#37352f' }}>{workOrder.notes}</p>
+      {/* Notes — editable */}
+      <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '12px 16px', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editingNotes ? 8 : workOrder.notes ? 6 : 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</div>
+          {!editingNotes && (
+            <button
+              className="btn btn-ghost"
+              style={{ padding: '2px 6px', fontSize: 12, color: '#787774', display: 'flex', alignItems: 'center', gap: 4 }}
+              onClick={() => { setNotesValue(workOrder.notes ?? ''); setEditingNotes(true) }}
+            >
+              <Pencil size={12} /> {workOrder.notes ? 'Edit' : 'Add notes'}
+            </button>
+          )}
         </div>
-      )}
+
+        {editingNotes ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <textarea
+              className="input"
+              value={notesValue}
+              onChange={e => setNotesValue(e.target.value)}
+              placeholder="Add notes about this work order…"
+              style={{ minHeight: 80, background: 'white' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: 13 }} onClick={() => setEditingNotes(false)}>
+                <X size={13} /> Cancel
+              </button>
+              <button className="btn btn-primary" style={{ padding: '5px 12px', fontSize: 13 }} onClick={handleSaveNotes} disabled={savingNotes}>
+                <Check size={13} /> {savingNotes ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          workOrder.notes
+            ? <p style={{ margin: 0, fontSize: 14, whiteSpace: 'pre-wrap', color: '#37352f' }}>{workOrder.notes}</p>
+            : <p style={{ margin: 0, fontSize: 13, color: '#b0aea8', fontStyle: 'italic' }}>No notes added.</p>
+        )}
+      </div>
 
       {/* Action bar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>

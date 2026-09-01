@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime, STATUS_FLOW, STATUS_LABELS, nextStatus } from '@/lib/utils'
+import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, MaintenanceItemAttachment, MaintenanceStatus } from '@/lib/types'
-import { ChevronRight } from 'lucide-react'
+import type { MaintenanceItem, ActivityLog, ContractorComment, MaintenanceItemAttachment, MaintenanceStatus, Priority, Trade } from '@/lib/types'
+import { Pencil } from 'lucide-react'
 
 interface Props {
   item: MaintenanceItem & { unit: any; trade: any; contractor: any; work_order: any }
@@ -14,9 +14,13 @@ interface Props {
   comments: ContractorComment[]
   attachments: MaintenanceItemAttachment[]
   contractors: { id: string; company_name: string }[]
+  trades: Trade[]
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, contractors }: Props) {
+const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent']
+const PRIORITY_LABELS: Record<Priority, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, contractors, trades }: Props) {
   const [item, setItem] = useState(initial)
   const [activity, setActivity] = useState(initialActivity)
   const [comments, setComments] = useState(initialComments)
@@ -24,6 +28,9 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [assigningContractor, setAssigningContractor] = useState(false)
   const [selectedContractor, setSelectedContractor] = useState(item.contractor_id ?? '')
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({ title: item.title, description: item.description ?? '', priority: item.priority, trade_id: item.trade_id ?? '' })
+  const [saving, setSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -71,6 +78,33 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
     if (data) { setComments(prev => [...prev, data]); setComment('') }
   }
 
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('maintenance_items')
+      .update({
+        title: editForm.title,
+        description: editForm.description || null,
+        priority: editForm.priority,
+        trade_id: editForm.trade_id || null,
+      })
+      .eq('id', item.id)
+      .select('*, trade:trades(id, name), contractor:contractors(id, company_name, contact_name, email, phone)')
+      .single()
+    if (!error && data) {
+      setItem(prev => ({ ...prev, ...data }))
+      setShowEditModal(false)
+      router.refresh()
+    }
+    setSaving(false)
+  }
+
+  function openEdit() {
+    setEditForm({ title: item.title, description: item.description ?? '', priority: item.priority, trade_id: item.trade_id ?? '' })
+    setShowEditModal(true)
+  }
+
   const unit = item.unit as any
   const trade = item.trade as any
   const contractor = item.contractor as any
@@ -85,6 +119,13 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <StatusBadge status={item.status} />
             <PriorityBadge priority={item.priority} />
+            <button
+              className="btn btn-ghost"
+              style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 13, color: '#787774', display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={openEdit}
+            >
+              <Pencil size={13} /> Edit
+            </button>
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px', color: '#37352f' }}>{item.title}</h2>
           {item.description && <p style={{ color: '#37352f', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{item.description}</p>}
@@ -212,6 +253,49 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
           {item.completed_at && <Row label="Completed" value={formatDateTime(item.completed_at)} />}
         </InfoCard>
       </div>
+
+      {/* Edit modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Edit Item</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveEdit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Title *</label>
+                  <input className="input" required value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Description</label>
+                  <textarea className="input" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} style={{ minHeight: 80 }} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Priority</label>
+                  <select className="input" value={editForm.priority} onChange={e => setEditForm(f => ({ ...f, priority: e.target.value as Priority }))}>
+                    {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                  </select>
+                </div>
+                {trades.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>Trade</label>
+                    <select className="input" value={editForm.trade_id} onChange={e => setEditForm(f => ({ ...f, trade_id: e.target.value }))}>
+                      <option value="">No trade</option>
+                      {trades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -246,3 +330,5 @@ function formatActivityLog(log: ActivityLog): string {
     default: return log.action.replace(/_/g, ' ')
   }
 }
+
+const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5, color: '#37352f' }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Copy, Check, ExternalLink, Archive, ArchiveRestore } from 'lucide-react'
+import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X } from 'lucide-react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
@@ -19,6 +19,15 @@ export default function ContractorDetailClient({ contractor: initial, assignment
   const [contractor, setContractor] = useState(initial)
   const [copied, setCopied] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editForm, setEditForm] = useState({
+    company_name: initial.company_name,
+    contact_name: initial.contact_name ?? '',
+    email: initial.email ?? '',
+    phone: initial.phone ?? '',
+    notes: initial.notes ?? '',
+  })
   const supabase = createClient()
   const router = useRouter()
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/portal/${contractor.portal_token}` : `/portal/${contractor.portal_token}`
@@ -41,6 +50,40 @@ export default function ContractorDetailClient({ contractor: initial, assignment
     if (data) setContractor(data)
     setArchiving(false)
     router.refresh()
+  }
+
+  function openEdit() {
+    setEditForm({
+      company_name: contractor.company_name,
+      contact_name: contractor.contact_name ?? '',
+      email: contractor.email ?? '',
+      phone: contractor.phone ?? '',
+      notes: contractor.notes ?? '',
+    })
+    setEditMode(true)
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const { data } = await supabase
+      .from('contractors')
+      .update({
+        company_name: editForm.company_name,
+        contact_name: editForm.contact_name || null,
+        email: editForm.email || null,
+        phone: editForm.phone || null,
+        notes: editForm.notes || null,
+      })
+      .eq('id', contractor.id)
+      .select()
+      .single()
+    if (data) {
+      setContractor(data)
+      setEditMode(false)
+      router.refresh()
+    }
+    setSaving(false)
   }
 
   const openItems = items.filter(i => i.status !== 'complete')
@@ -97,12 +140,55 @@ export default function ContractorDetailClient({ contractor: initial, assignment
 
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Contact card — view or edit mode */}
         <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
-          <h4 style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</h4>
-          {contractor.contact_name && <Row label="Name" value={contractor.contact_name} />}
-          {contractor.email && <Row label="Email" value={contractor.email} />}
-          {contractor.phone && <Row label="Phone" value={contractor.phone} />}
-          {contractor.notes && <><div style={{ borderTop: '1px solid #f1f1ef', margin: '8px 0' }} /><p style={{ fontSize: 13, color: '#37352f' }}>{contractor.notes}</p></>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h4 style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</h4>
+            {!editMode && (
+              <button className="btn btn-ghost" style={{ padding: '2px 6px', color: '#787774' }} onClick={openEdit} title="Edit contractor details">
+                <Pencil size={13} />
+              </button>
+            )}
+          </div>
+
+          {editMode ? (
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Field label="Company name *">
+                <input className="input" required value={editForm.company_name} onChange={e => setEditForm(f => ({ ...f, company_name: e.target.value }))} />
+              </Field>
+              <Field label="Contact name">
+                <input className="input" value={editForm.contact_name} onChange={e => setEditForm(f => ({ ...f, contact_name: e.target.value }))} />
+              </Field>
+              <Field label="Email">
+                <input className="input" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
+              </Field>
+              <Field label="Phone">
+                <input className="input" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
+              </Field>
+              <Field label="Notes">
+                <textarea className="input" value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="Reliability notes, rates, etc." style={{ minHeight: 64 }} />
+              </Field>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: 13 }} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" className="btn btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setEditMode(false)}>
+                  <X size={14} />
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              {contractor.contact_name && <Row label="Name" value={contractor.contact_name} />}
+              {contractor.email && <Row label="Email" value={contractor.email} />}
+              {contractor.phone && <Row label="Phone" value={contractor.phone} />}
+              {contractor.notes && <><div style={{ borderTop: '1px solid #f1f1ef', margin: '8px 0' }} /><p style={{ fontSize: 13, color: '#37352f' }}>{contractor.notes}</p></>}
+              {!contractor.contact_name && !contractor.email && !contractor.phone && !contractor.notes && (
+                <p style={{ fontSize: 13, color: '#787774', margin: 0 }}>No contact details. Click edit to add.</p>
+              )}
+            </>
+          )}
         </div>
 
         <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
@@ -155,6 +241,15 @@ function Row({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 4 }}>
       <span style={{ color: '#787774', minWidth: 48, flexShrink: 0 }}>{label}</span>
       <span style={{ color: '#37352f' }}>{value}</span>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 3, color: '#787774' }}>{label}</label>
+      {children}
     </div>
   )
 }

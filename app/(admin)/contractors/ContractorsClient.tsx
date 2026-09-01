@@ -2,20 +2,24 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, Copy, Check, ExternalLink } from 'lucide-react'
+import { Plus, Copy, Check, ExternalLink, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Contractor } from '@/lib/types'
 
 interface Props { contractors: Contractor[] }
 
+const emptyForm = { company_name: '', contact_name: '', email: '', phone: '', notes: '' }
+
 export default function ContractorsClient({ contractors: initial }: Props) {
   const [contractors, setContractors] = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [editingContractor, setEditingContractor] = useState<Contractor | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [saving, setSaving] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [form, setForm] = useState({ company_name: '', contact_name: '', email: '', phone: '', notes: '' })
+  const [form, setForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState(emptyForm)
   const router = useRouter()
   const supabase = createClient()
 
@@ -32,9 +36,39 @@ export default function ContractorsClient({ contractors: initial }: Props) {
     if (data) {
       setContractors(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)))
       setShowModal(false)
-      setForm({ company_name: '', contact_name: '', email: '', phone: '', notes: '' })
+      setForm(emptyForm)
     }
     setSaving(false)
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editingContractor) return
+    setSaving(true)
+    const { data } = await supabase.from('contractors').update({
+      company_name: editForm.company_name,
+      contact_name: editForm.contact_name || null,
+      email: editForm.email || null,
+      phone: editForm.phone || null,
+      notes: editForm.notes || null,
+    }).eq('id', editingContractor.id).select().single()
+    if (data) {
+      setContractors(prev => prev.map(c => c.id === data.id ? data : c).sort((a, b) => a.company_name.localeCompare(b.company_name)))
+      setEditingContractor(null)
+      router.refresh()
+    }
+    setSaving(false)
+  }
+
+  function openEdit(c: Contractor) {
+    setEditForm({
+      company_name: c.company_name,
+      contact_name: c.contact_name ?? '',
+      email: c.email ?? '',
+      phone: c.phone ?? '',
+      notes: c.notes ?? '',
+    })
+    setEditingContractor(c)
   }
 
   function copyPortalLink(contractor: Contractor) {
@@ -62,6 +96,7 @@ export default function ContractorsClient({ contractors: initial }: Props) {
             contractors={contractors.filter(c => c.is_active !== false)}
             copiedId={copiedId}
             onCopy={copyPortalLink}
+            onEdit={openEdit}
           />
           {contractors.some(c => c.is_active === false) && (
             <div style={{ marginTop: 24 }}>
@@ -80,6 +115,7 @@ export default function ContractorsClient({ contractors: initial }: Props) {
                     contractors={contractors.filter(c => c.is_active === false)}
                     copiedId={copiedId}
                     onCopy={copyPortalLink}
+                    onEdit={openEdit}
                     dimmed
                   />
                 </div>
@@ -89,6 +125,7 @@ export default function ContractorsClient({ contractors: initial }: Props) {
         </>
       )}
 
+      {/* Create modal */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -112,6 +149,31 @@ export default function ContractorsClient({ contractors: initial }: Props) {
           </div>
         </div>
       )}
+
+      {/* Edit modal */}
+      {editingContractor && (
+        <div className="modal-overlay" onClick={() => setEditingContractor(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Edit Contractor</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setEditingContractor(null)}>✕</button>
+            </div>
+            <form onSubmit={handleEdit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <Field label="Company name *"><input className="input" required value={editForm.company_name} onChange={e => setEditForm(f => ({ ...f, company_name: e.target.value }))} /></Field>
+                <Field label="Contact name"><input className="input" value={editForm.contact_name} onChange={e => setEditForm(f => ({ ...f, contact_name: e.target.value }))} /></Field>
+                <Field label="Email"><input className="input" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></Field>
+                <Field label="Phone"><input className="input" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+                <Field label="Notes"><textarea className="input" value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} placeholder="Reliability notes, rates, etc." /></Field>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingContractor(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -125,16 +187,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function ContractorTable({ contractors, copiedId, onCopy, dimmed }: {
+function ContractorTable({ contractors, copiedId, onCopy, onEdit, dimmed }: {
   contractors: Contractor[]
   copiedId: string | null
   onCopy: (c: Contractor) => void
+  onEdit: (c: Contractor) => void
   dimmed?: boolean
 }) {
   return (
     <table className="data-table" style={{ opacity: dimmed ? 0.6 : 1 }}>
       <thead>
-        <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>Portal</th></tr>
+        <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>Portal</th><th></th></tr>
       </thead>
       <tbody>
         {contractors.map(c => (
@@ -167,6 +230,16 @@ function ContractorTable({ contractors, copiedId, onCopy, dimmed }: {
                   <ExternalLink size={13} />
                 </a>
               </div>
+            </td>
+            <td>
+              <button
+                className="btn btn-ghost"
+                style={{ padding: '3px 6px', color: '#787774' }}
+                onClick={() => onEdit(c)}
+                title="Edit contractor"
+              >
+                <Pencil size={13} />
+              </button>
             </td>
           </tr>
         ))}

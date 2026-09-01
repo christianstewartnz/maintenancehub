@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore } from 'lucide-react'
+import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore, Pencil } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
@@ -20,18 +20,32 @@ interface Props {
 
 type Tab = 'units' | 'trades' | 'work-orders'
 
-export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades, contractors, assignments: initialAssignments, workOrders }: Props) {
+const emptyUnitForm = {
+  unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '',
+  owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '',
+  settlement_date: '', notes: '',
+}
+
+export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades: initialTrades, contractors, assignments: initialAssignments, workOrders }: Props) {
   const [project, setProject] = useState(initialProject)
   const [tab, setTab] = useState<Tab>('units')
   const [units, setUnits] = useState(initialUnits)
+  const [trades, setTrades] = useState(initialTrades)
   const [assignments, setAssignments] = useState(initialAssignments)
   const [showUnitModal, setShowUnitModal] = useState(false)
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
   const [showAssignModal, setShowAssignModal] = useState<Trade | null>(null)
+  const [showAddTradeModal, setShowAddTradeModal] = useState(false)
+  const [newTradeName, setNewTradeName] = useState('')
+  const [showProjectEditModal, setShowProjectEditModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const [unitForm, setUnitForm] = useState(emptyUnitForm)
+  const [projectEditForm, setProjectEditForm] = useState({ name: project.name, address: project.address ?? '', description: project.description ?? '' })
 
   async function toggleArchive() {
     setArchiving(true)
@@ -46,12 +60,6 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     setArchiving(false)
     router.refresh()
   }
-
-  const [unitForm, setUnitForm] = useState({
-    unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '',
-    owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '',
-    settlement_date: '', notes: '',
-  })
 
   function maintenanceDueDate(settlementDate: string | null): string {
     if (!settlementDate) return '—'
@@ -70,15 +78,65 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     return '#787774'
   }
 
-  async function handleCreateUnit(e: React.FormEvent) {
+  function openCreateUnit() {
+    setEditingUnit(null)
+    setUnitForm(emptyUnitForm)
+    setShowUnitModal(true)
+  }
+
+  function openEditUnit(unit: Unit) {
+    setEditingUnit(unit)
+    setUnitForm({
+      unit_identifier: unit.unit_identifier,
+      lot_number: unit.lot_number ?? '',
+      address: unit.address ?? '',
+      owner_name: unit.owner_name ?? '',
+      owner_email: unit.owner_email ?? '',
+      owner_phone: unit.owner_phone ?? '',
+      access_contact_name: unit.access_contact_name ?? '',
+      access_contact_email: unit.access_contact_email ?? '',
+      access_contact_phone: unit.access_contact_phone ?? '',
+      settlement_date: unit.settlement_date ?? '',
+      notes: unit.notes ?? '',
+    })
+    setShowUnitModal(true)
+  }
+
+  async function handleSaveUnit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const insertData = { ...unitForm, settlement_date: unitForm.settlement_date || null }
-    const { data, error } = await supabase.from('units').insert({ project_id: project.id, ...insertData }).select().single()
+    const payload = { ...unitForm, settlement_date: unitForm.settlement_date || null }
+
+    if (editingUnit) {
+      const { data, error } = await supabase.from('units').update(payload).eq('id', editingUnit.id).select().single()
+      if (!error && data) {
+        setUnits(u => u.map(x => x.id === data.id ? data : x))
+        setShowUnitModal(false)
+      }
+    } else {
+      const { data, error } = await supabase.from('units').insert({ project_id: project.id, ...payload }).select().single()
+      if (!error && data) {
+        setUnits(u => [...u, data].sort((a, b) => a.unit_identifier.localeCompare(b.unit_identifier)))
+        setShowUnitModal(false)
+        setUnitForm(emptyUnitForm)
+      }
+    }
+    setSaving(false)
+  }
+
+  async function handleSaveProject(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('projects')
+      .update({ name: projectEditForm.name, address: projectEditForm.address || null, description: projectEditForm.description || null })
+      .eq('id', project.id)
+      .select()
+      .single()
     if (!error && data) {
-      setUnits(u => [...u, data].sort((a, b) => a.unit_identifier.localeCompare(b.unit_identifier)))
-      setShowUnitModal(false)
-      setUnitForm({ unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '', owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '', settlement_date: '', notes: '' })
+      setProject(data)
+      setShowProjectEditModal(false)
+      router.refresh()
     }
     setSaving(false)
   }
@@ -125,9 +183,23 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     setAssignments(a => a.filter(x => x.id !== id))
   }
 
+  async function handleAddTrade(e: React.FormEvent) {
+    e.preventDefault()
+    const name = newTradeName.trim()
+    if (!name) return
+    setSaving(true)
+    const { data, error } = await supabase.from('trades').insert({ project_id: project.id, name }).select().single()
+    if (!error && data) {
+      setTrades(t => [...t, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setShowAddTradeModal(false)
+      setNewTradeName('')
+    }
+    setSaving(false)
+  }
+
   return (
     <div style={{ padding: '0 32px 32px' }}>
-      {/* Tabs + archive */}
+      {/* Tabs + actions */}
       <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e9e9e7', marginBottom: 24, marginTop: 20 }}>
         <div style={{ display: 'flex', gap: 0, flex: 1 }}>
           {(['units', 'trades', 'work-orders'] as Tab[]).map(t => (
@@ -146,23 +218,32 @@ export default function ProjectDetailClient({ project: initialProject, units: in
             </button>
           ))}
         </div>
-        <button
-          className="btn btn-ghost"
-          style={{ fontSize: 13, color: '#787774', marginBottom: 4, gap: 6 }}
-          onClick={toggleArchive}
-          disabled={archiving}
-        >
-          {project.status === 'active'
-            ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive Project'}</>
-            : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore Project'}</>}
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 13, color: '#787774', gap: 6 }}
+            onClick={() => { setProjectEditForm({ name: project.name, address: project.address ?? '', description: project.description ?? '' }); setShowProjectEditModal(true) }}
+          >
+            <Pencil size={14} /> Edit Project
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 13, color: '#787774', gap: 6 }}
+            onClick={toggleArchive}
+            disabled={archiving}
+          >
+            {project.status === 'active'
+              ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive'}</>
+              : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore'}</>}
+          </button>
+        </div>
       </div>
 
       {/* ── Units tab ── */}
       {tab === 'units' && (
         <>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button className="btn btn-primary" onClick={() => setShowUnitModal(true)}><Plus size={16} /> Add Unit</button>
+            <button className="btn btn-primary" onClick={openCreateUnit}><Plus size={16} /> Add Unit</button>
             <button className="btn btn-secondary" onClick={downloadTemplate}><Download size={16} /> CSV Template</button>
             <button className="btn btn-secondary" onClick={() => fileRef.current?.click()}><Upload size={16} /> Import CSV</button>
             <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCsvImport} />
@@ -180,7 +261,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                   <tr>
                     <th>Unit ID</th><th>Lot</th><th>Address</th>
                     <th>Owner</th><th>Owner Contact</th><th>Access Contact</th>
-                    <th>Settlement</th><th>Maint. Due</th>
+                    <th>Settlement</th><th>Maint. Due</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -194,6 +275,16 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
                       <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
+                      <td>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: '3px 6px', color: '#787774' }}
+                          onClick={() => openEditUnit(u)}
+                          title="Edit unit"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -206,6 +297,11 @@ export default function ProjectDetailClient({ project: initialProject, units: in
       {/* ── Trades tab ── */}
       {tab === 'trades' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ marginBottom: 8 }}>
+            <button className="btn btn-primary" onClick={() => { setNewTradeName(''); setShowAddTradeModal(true) }}>
+              <Plus size={16} /> Add Trade
+            </button>
+          </div>
           {trades.map(trade => {
             const tradeAssignments = assignments.filter(a => a.trade_id === trade.id)
             return (
@@ -261,15 +357,15 @@ export default function ProjectDetailClient({ project: initialProject, units: in
         </>
       )}
 
-      {/* Unit modal */}
+      {/* Unit modal (create + edit) */}
       {showUnitModal && (
         <div className="modal-overlay" onClick={() => setShowUnitModal(false)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Add Unit</h2>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{editingUnit ? 'Edit Unit' : 'Add Unit'}</h2>
               <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setShowUnitModal(false)}>✕</button>
             </div>
-            <form onSubmit={handleCreateUnit}>
+            <form onSubmit={handleSaveUnit}>
               <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Unit Identifier *" required><input className="input" required value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. A1" /></Field>
                 <Field label="Lot Number"><input className="input" value={unitForm.lot_number} onChange={e => setUnitForm(f => ({ ...f, lot_number: e.target.value }))} placeholder="e.g. Lot 1" /></Field>
@@ -294,7 +390,68 @@ export default function ProjectDetailClient({ project: initialProject, units: in
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowUnitModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Add Unit'}</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : editingUnit ? 'Save Changes' : 'Add Unit'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Project edit modal */}
+      {showProjectEditModal && (
+        <div className="modal-overlay" onClick={() => setShowProjectEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Edit Project</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setShowProjectEditModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSaveProject}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <Field label="Project name *" required>
+                  <input className="input" required value={projectEditForm.name} onChange={e => setProjectEditForm(f => ({ ...f, name: e.target.value }))} />
+                </Field>
+                <Field label="Address">
+                  <input className="input" value={projectEditForm.address} onChange={e => setProjectEditForm(f => ({ ...f, address: e.target.value }))} placeholder="General project address" />
+                </Field>
+                <Field label="Description">
+                  <textarea className="input" value={projectEditForm.description} onChange={e => setProjectEditForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional notes about this project" />
+                </Field>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowProjectEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add trade modal */}
+      {showAddTradeModal && (
+        <div className="modal-overlay" onClick={() => setShowAddTradeModal(false)}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Add Trade</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setShowAddTradeModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleAddTrade}>
+              <div className="modal-body">
+                <Field label="Trade name *" required>
+                  <input
+                    className="input"
+                    required
+                    autoFocus
+                    value={newTradeName}
+                    onChange={e => setNewTradeName(e.target.value)}
+                    placeholder="e.g. Irrigation, Pest Control"
+                  />
+                </Field>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowAddTradeModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={saving || !newTradeName.trim()}>
+                  {saving ? 'Adding…' : 'Add Trade'}
+                </button>
               </div>
             </form>
           </div>
