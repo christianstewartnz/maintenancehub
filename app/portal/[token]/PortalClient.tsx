@@ -321,7 +321,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
           <div style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
             <select className="input" style={{ width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
               <option value="all">All Status</option>
-              {(['assigned', 'in_progress', 'contractor_complete', 'confirmed'] as MaintenanceStatus[]).map(s => (
+              {(['assigned', 'in_progress', 'contractor_complete'] as MaintenanceStatus[]).map(s => (
                 <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
               ))}
             </select>

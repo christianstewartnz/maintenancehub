@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -34,7 +34,24 @@ export default function Sidebar() {
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [signOffCount, setSignOffCount] = useState(0)
   const supabase = createClient()
+
+  useEffect(() => {
+    async function fetchCount() {
+      const { count } = await supabase
+        .from('maintenance_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'contractor_complete')
+      setSignOffCount(count ?? 0)
+    }
+    fetchCount()
+    const channel = supabase
+      .channel('sidebar_signoff_count')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance_items' }, fetchCount)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -91,6 +108,8 @@ export default function Sidebar() {
         <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== '/' && pathname.startsWith(href))
+            const isSignOff = href === '/sign-off'
+            const showBadge = isSignOff && signOffCount > 0
             return (
               <Link
                 key={href}
@@ -98,9 +117,37 @@ export default function Sidebar() {
                 className={`sidebar-nav-item ${active ? 'active' : ''}`}
                 onClick={() => setMobileOpen(false)}
                 title={collapsed ? label : undefined}
+                style={{ position: 'relative' }}
               >
-                <Icon size={18} style={{ flexShrink: 0, color: active ? '#37352f' : '#787774' }} />
+                <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+                  <Icon size={18} style={{ color: active ? '#37352f' : '#787774' }} />
+                  {showBadge && collapsed && (
+                    <span style={{
+                      position: 'absolute', top: -4, right: -4,
+                      minWidth: 14, height: 14, borderRadius: 7,
+                      background: '#e03c3c', color: 'white',
+                      fontSize: 9, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 3px', lineHeight: 1,
+                      border: '1.5px solid white',
+                    }}>
+                      {signOffCount > 99 ? '99+' : signOffCount}
+                    </span>
+                  )}
+                </span>
                 {!collapsed && <span>{label}</span>}
+                {showBadge && !collapsed && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    minWidth: 18, height: 18, borderRadius: 9,
+                    background: '#e03c3c', color: 'white',
+                    fontSize: 11, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '0 5px', lineHeight: 1,
+                  }}>
+                    {signOffCount > 99 ? '99+' : signOffCount}
+                  </span>
+                )}
               </Link>
             )
           })}
