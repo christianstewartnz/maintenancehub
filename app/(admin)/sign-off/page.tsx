@@ -19,16 +19,18 @@ export default async function SignOffPage() {
 
   const itemIds = (items ?? []).map(i => i.id)
 
-  const { data: comments } = itemIds.length
+  const { data: rawComments } = itemIds.length
     ? await supabase
         .from('contractor_comments')
         .select('id, maintenance_item_id, author, content, created_at')
         .in('maintenance_item_id', itemIds)
         .order('created_at', { ascending: false })
-    : { data: [] }
+    : { data: null }
 
-  const lastCommentMap = new Map<string, typeof comments extends (infer T)[] | null ? T : never>()
-  for (const c of comments ?? []) {
+  const comments = rawComments ?? []
+  type Comment = (typeof comments)[number]
+  const lastCommentMap = new Map<string, Comment>()
+  for (const c of comments) {
     if (!lastCommentMap.has(c.maintenance_item_id)) lastCommentMap.set(c.maintenance_item_id, c)
   }
 
