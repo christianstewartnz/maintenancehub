@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "maintenance-hub": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "C:\\Users\\ChristianStewart\\Documents\\maintenance hub"
+    }
+  }
+}
