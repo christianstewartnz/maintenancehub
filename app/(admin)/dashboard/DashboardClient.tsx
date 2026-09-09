@@ -364,14 +364,18 @@ function MonthCalendar({ items, onClose }: { items: MaintenanceItem[]; onClose: 
               <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? '#2383e2' : isPast ? '#a0a09e' : '#37352f', marginBottom: 4 }}>
                 {day.getDate()}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {allUnits.slice(0, 2).map(ug => (
                   <div key={ug.unitId} style={{
-                    fontSize: 10, fontWeight: 600, color: '#37352f',
-                    background: '#eef4ff', borderRadius: 3, padding: '1px 4px',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    background: '#eef4ff', borderRadius: 3, padding: '2px 5px',
+                    overflow: 'hidden',
                   }} title={`${ug.projectName} · ${ug.unitIdentifier}`}>
-                    {ug.unitIdentifier}
+                    <div style={{ fontSize: 10, fontWeight: 600, color: '#37352f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ug.unitIdentifier}
+                    </div>
+                    <div style={{ fontSize: 9, color: '#787774', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ug.projectName}
+                    </div>
                   </div>
                 ))}
                 {unitCount > 2 && <div style={{ fontSize: 10, color: '#787774' }}>+{unitCount - 2}</div>}
