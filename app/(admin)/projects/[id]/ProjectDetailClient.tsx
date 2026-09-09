@@ -388,7 +388,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
             </div>
             <form onSubmit={handleSaveUnit}>
               <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Construction Number *" required><input className="input" required value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. C001" /></Field>
+                <Field label="Construction Number"><input className="input" value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. C001" /></Field>
                 <Field label="Lot Number"><input className="input" value={unitForm.lot_number} onChange={e => setUnitForm(f => ({ ...f, lot_number: e.target.value }))} placeholder="e.g. Lot 1" /></Field>
                 <Field label="Address" style={{ gridColumn: 'span 2' }}><input className="input" value={unitForm.address} onChange={e => setUnitForm(f => ({ ...f, address: e.target.value }))} placeholder="Full unit address" /></Field>
                 <Field label="Owner Name"><input className="input" value={unitForm.owner_name} onChange={e => setUnitForm(f => ({ ...f, owner_name: e.target.value }))} /></Field>
