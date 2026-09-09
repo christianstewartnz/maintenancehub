@@ -11,7 +11,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const [projectRes, unitsRes, tradesRes, contractorsRes, assignmentsRes, workOrdersRes] = await Promise.all([
     supabase.from('projects').select('*').eq('id', id).single(),
-    supabase.from('units').select('*').eq('project_id', id).order('unit_identifier'),
+    supabase.from('units').select('*').eq('project_id', id),
     supabase.from('trades').select('*').eq('project_id', id).order('name'),
     supabase.from('contractors').select('*').order('company_name'),
     supabase.from('project_trade_assignments').select('*, trade:trades(*), contractor:contractors(*)').eq('project_id', id),
@@ -30,7 +30,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       />
       <ProjectDetailClient
         project={projectRes.data}
-        units={unitsRes.data ?? []}
+        units={(unitsRes.data ?? []).sort((a, b) => {
+          const n = (v: string | null) => v ? parseInt(v.replace(/\D/g, ''), 10) || Infinity : Infinity
+          return n(a.lot_number) - n(b.lot_number)
+        })}
         trades={tradesRes.data ?? []}
         contractors={contractorsRes.data ?? []}
         assignments={assignmentsRes.data ?? []}
