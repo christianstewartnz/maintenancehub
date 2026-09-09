@@ -193,10 +193,9 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
                   <td style={{ fontSize: 13 }}>{unit?.unit_identifier ?? '—'}</td>
                   <td style={{ fontSize: 13, color: '#787774', maxWidth: 180 }}>{unit?.address ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>
-                    {unit?.owner_name ?? '—'}
-                    {unit?.owner_phone && (
-                      <span style={{ color: '#787774' }}> · {unit.owner_phone}</span>
-                    )}
+                    {unit?.owners?.length > 0
+                      ? unit.owners.map((o: any) => o.name).join(', ')
+                      : '—'}
                   </td>
                   <td style={{ fontSize: 13, color: '#787774' }}>{item.trade?.name ?? '—'}</td>
                   <td><StatusBadge status={item.status} /></td>

@@ -16,15 +16,21 @@ export interface Project {
   updated_at: string
 }
 
+export interface UnitOwner {
+  id: string
+  unit_id: string
+  name: string
+  email: string | null
+  phone: string | null
+  created_at: string
+}
+
 export interface Unit {
   id: string
   project_id: string
-  unit_identifier: string
+  unit_identifier: string | null
   lot_number: string | null
   address: string | null
-  owner_name: string | null
-  owner_email: string | null
-  owner_phone: string | null
   access_contact_name: string | null
   access_contact_email: string | null
   access_contact_phone: string | null
@@ -32,6 +38,7 @@ export interface Unit {
   notes: string | null
   created_at: string
   updated_at: string
+  owners?: UnitOwner[]
 }
 
 export interface Contractor {

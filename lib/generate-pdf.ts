@@ -76,11 +76,13 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
           : `Construction No. ${unit.unit_identifier}`
         doc.text(unitLine, { indent: 12 })
         if (unit.address) doc.text(`Address: ${unit.address}`, { indent: 12 })
-        if (unit.owner_name) {
-          doc.text(
-            `Owner: ${unit.owner_name}${unit.owner_phone ? `  ·  ${unit.owner_phone}` : ''}`,
-            { indent: 12 },
-          )
+        if (unit.owners?.length) {
+          for (const owner of unit.owners) {
+            doc.text(
+              `Owner: ${owner.name}${owner.phone ? `  ·  ${owner.phone}` : ''}`,
+              { indent: 12 },
+            )
+          }
         }
         if (unit.access_contact_name) {
           doc.text(

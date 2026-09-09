@@ -19,7 +19,7 @@ export async function GET(
       .single(),
     supabase
       .from('maintenance_items')
-      .select('*, unit:units(id, unit_identifier, lot_number, address, owner_name, owner_phone, owner_email, access_contact_name, access_contact_phone), trade:trades(name)')
+      .select('*, unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, owners:unit_owners(id, name, phone)), trade:trades(name)')
       .eq('work_order_id', id)
       .order('created_at'),
   ])

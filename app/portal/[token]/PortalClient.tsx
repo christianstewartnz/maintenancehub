@@ -398,7 +398,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {units.map(({ unit, items: unitItems }) => {
                         const isUnitOpen = expandedUnits.has(unit.id)
-                        const hasOwner = unit.owner_name || unit.owner_phone
+                        const hasOwners = unit.owners?.length > 0
                         const hasAddress = !!unit.address
 
                         return (
@@ -410,7 +410,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                             >
                               <div style={{ flex: 1 }}>
                                 {/* Unit identifier + item count */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: hasOwner || hasAddress ? 6 : 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: hasOwners || hasAddress ? 6 : 0 }}>
                                   <span style={{ fontSize: 15, fontWeight: 700, color: '#37352f' }}>{unit.unit_identifier}</span>
                                   <span style={{
                                     fontSize: 11, fontWeight: 500, color: '#787774',
@@ -421,20 +421,20 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                 </div>
 
                                 {/* Owner / access details — always visible on the unit row */}
-                                {(hasOwner || hasAddress) && (
+                                {(hasOwners || hasAddress) && (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                    {hasOwner && (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#37352f' }}>
+                                    {hasOwners && unit.owners.map((o: any) => (
+                                      <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#37352f' }}>
                                         <User size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />
-                                        <span>{unit.owner_name}</span>
-                                        {unit.owner_phone && (
+                                        <span>{o.name}</span>
+                                        {o.phone && (
                                           <>
                                             <Phone size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
-                                            <span>{unit.owner_phone}</span>
+                                            <span>{o.phone}</span>
                                           </>
                                         )}
                                       </div>
-                                    )}
+                                    ))}
                                     {hasAddress && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#787774' }}>
                                         <MapPin size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />

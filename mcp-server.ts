@@ -211,14 +211,15 @@ server.tool(
 
     const { data, error } = await supabase
       .from('units')
-      .select('id, unit_identifier, lot_number, address, owner_name, owner_email, owner_phone, settlement_date')
+      .select('id, unit_identifier, lot_number, address, settlement_date, owners:unit_owners(id, name, email, phone)')
       .eq('project_id', proj.id)
       .order('lot_number', { ascending: true })
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    const text = data.map(u =>
-      `[${u.id}] Construction No. ${u.unit_identifier}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${u.address ? ` | ${u.address}` : ''}${u.owner_name ? ` | ${u.owner_name}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}`
-    ).join('\n')
+    const text = data.map((u: any) => {
+      const ownerNames = u.owners?.map((o: any) => o.name).join(', ')
+      return `[${u.id}] Construction No. ${u.unit_identifier}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${u.address ? ` | ${u.address}` : ''}${ownerNames ? ` | ${ownerNames}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}`
+    }).join('\n')
     return { content: [{ type: 'text', text: `Units for ${proj.name}:\n\n${text || 'No units.'}` }] }
   },
 )
@@ -230,18 +231,22 @@ server.tool(
   async ({ unit_id }) => {
     const { data, error } = await supabase
       .from('units')
-      .select('*, project:projects(name)')
+      .select('*, project:projects(name), owners:unit_owners(id, name, email, phone)')
       .eq('id', unit_id)
       .single()
 
     if (error || !data) return { content: [{ type: 'text', text: 'Unit not found.' }] }
 
+    const owners = (data as any).owners ?? []
+    const ownerLines = owners.length
+      ? owners.map((o: any) => `  [${o.id}] ${o.name}${o.email ? ` | ${o.email}` : ''}${o.phone ? ` | ${o.phone}` : ''}`).join('\n')
+      : '  (none)'
     const lines = [
-      `Project: ${(data.project as any)?.name ?? '?'}`,
+      `Project: ${(data as any).project?.name ?? '?'}`,
       `Construction No.: ${data.unit_identifier}`,
       `Lot number: ${data.lot_number ?? '—'}`,
       `Address: ${data.address ?? '—'}`,
-      `Owner: ${data.owner_name ?? '—'} | ${data.owner_email ?? '—'} | ${data.owner_phone ?? '—'}`,
+      `Owners:\n${ownerLines}`,
       `Access contact: ${data.access_contact_name ?? '—'} | ${data.access_contact_email ?? '—'} | ${data.access_contact_phone ?? '—'}`,
       `Settlement date: ${data.settlement_date ?? '—'}`,
       `Notes: ${data.notes ?? '—'}`,
@@ -255,30 +260,27 @@ server.tool(
   'Create a new unit in a project',
   {
     project: z.string().describe('Project name (partial) or ID'),
-    unit_identifier: z.string().describe('Construction number / unit identifier'),
+    unit_identifier: z.string().optional().describe('Construction number / unit identifier'),
     lot_number: z.string().optional(),
     address: z.string().optional(),
-    owner_name: z.string().optional(),
-    owner_email: z.string().optional(),
-    owner_phone: z.string().optional(),
     access_contact_name: z.string().optional(),
     access_contact_email: z.string().optional(),
     access_contact_phone: z.string().optional(),
     settlement_date: z.string().optional().describe('ISO date string e.g. 2025-06-01'),
     notes: z.string().optional(),
   },
-  async ({ project, unit_identifier, ...fields }) => {
+  async ({ project, ...fields }) => {
     const proj = await resolveProjectAny(project)
     if (!proj) return { content: [{ type: 'text', text: 'Project not found.' }] }
 
     const { data, error } = await supabase
       .from('units')
-      .insert({ project_id: proj.id, unit_identifier, ...fields })
-      .select('id, unit_identifier')
+      .insert({ project_id: proj.id, ...fields })
+      .select('id, unit_identifier, lot_number')
       .single()
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Unit ${data.unit_identifier} created [id: ${data.id}]` }] }
+    return { content: [{ type: 'text', text: `Unit created [id: ${data.id}]${data.unit_identifier ? ` Construction No. ${data.unit_identifier}` : ''}${data.lot_number ? ` Lot ${data.lot_number}` : ''}` }] }
   },
 )
 
@@ -290,9 +292,6 @@ server.tool(
     unit_identifier: z.string().optional().describe('Construction number'),
     lot_number: z.string().optional(),
     address: z.string().optional(),
-    owner_name: z.string().optional(),
-    owner_email: z.string().optional(),
-    owner_phone: z.string().optional(),
     access_contact_name: z.string().optional(),
     access_contact_email: z.string().optional(),
     access_contact_phone: z.string().optional(),
@@ -327,6 +326,58 @@ server.tool(
     const { error } = await supabase.from('units').delete().eq('id', unit_id)
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     return { content: [{ type: 'text', text: `Unit deleted.` }] }
+  },
+)
+
+// ─── UNIT OWNERS ─────────────────────────────────────────────────────────────
+
+server.tool(
+  'list_unit_owners',
+  'List all owners for a unit',
+  { unit_id: z.string().describe('Unit ID (from list_units or get_unit)') },
+  async ({ unit_id }) => {
+    const { data, error } = await supabase
+      .from('unit_owners')
+      .select('id, name, email, phone, created_at')
+      .eq('unit_id', unit_id)
+      .order('created_at')
+
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    if (!data?.length) return { content: [{ type: 'text', text: 'No owners for this unit.' }] }
+    const text = data.map(o => `[${o.id}] ${o.name}${o.email ? ` | ${o.email}` : ''}${o.phone ? ` | ${o.phone}` : ''}`).join('\n')
+    return { content: [{ type: 'text', text: text }] }
+  },
+)
+
+server.tool(
+  'add_unit_owner',
+  'Add an owner to a unit. Use get_unit or list_units to find the unit_id first.',
+  {
+    unit_id: z.string().describe('Unit ID (from list_units or get_unit)'),
+    name: z.string().describe('Owner full name'),
+    email: z.string().optional().describe('Owner email'),
+    phone: z.string().optional().describe('Owner phone'),
+  },
+  async ({ unit_id, name, email, phone }) => {
+    const { data, error } = await supabase
+      .from('unit_owners')
+      .insert({ unit_id, name, email: email || null, phone: phone || null })
+      .select('id, name')
+      .single()
+
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    return { content: [{ type: 'text', text: `Owner "${data.name}" added [id: ${data.id}]` }] }
+  },
+)
+
+server.tool(
+  'remove_unit_owner',
+  'Remove an owner from a unit',
+  { owner_id: z.string().describe('Owner ID (from list_unit_owners or get_unit)') },
+  async ({ owner_id }) => {
+    const { error } = await supabase.from('unit_owners').delete().eq('id', owner_id)
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    return { content: [{ type: 'text', text: 'Owner removed.' }] }
   },
 )
 
@@ -652,7 +703,7 @@ server.tool(
       .from('maintenance_items')
       .select(`
         *,
-        unit:units(unit_identifier, lot_number, address, owner_name, owner_phone, owner_email, project:projects(name)),
+        unit:units(unit_identifier, lot_number, address, owners:unit_owners(id, name, email, phone), project:projects(name)),
         trade:trades(name),
         contractor:contractors(company_name, email, phone),
         work_order:work_orders(work_order_number)
@@ -682,7 +733,7 @@ server.tool(
       `Project: ${(u?.project as any)?.name ?? '—'}`,
       `Unit: Construction No. ${u?.unit_identifier ?? '—'} | Lot ${u?.lot_number ?? '—'}`,
       `Address: ${u?.address ?? '—'}`,
-      `Owner: ${u?.owner_name ?? '—'} | ${u?.owner_phone ?? '—'} | ${u?.owner_email ?? '—'}`,
+      u?.owners?.length ? `Owners: ${u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}${o.email ? ` <${o.email}>` : ''}`).join(', ')}` : 'Owner: —',
       `Trade: ${(item.trade as any)?.name ?? '—'}`,
       `Contractor: ${(item.contractor as any)?.company_name ?? '—'}`,
       `Work Order: ${(item.work_order as any)?.work_order_number ?? '—'}`,
@@ -1027,7 +1078,7 @@ server.tool(
 
     const { data: items } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, unit:units(unit_identifier, address, owner_name, owner_phone), trade:trades(name)')
+      .select('item_number, title, status, priority, unit:units(unit_identifier, address, owners:unit_owners(name, phone)), trade:trades(name)')
       .eq('work_order_id', wo.id)
       .order('item_number')
 
@@ -1042,7 +1093,8 @@ server.tool(
       `Items (${items?.length ?? 0}):`,
       ...(items ?? []).map(i => {
         const u = i.unit as any
-        return `  [${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | Unit ${u?.unit_identifier ?? '?'} — ${u?.address ?? '—'} | ${u?.owner_name ?? '—'} ${u?.owner_phone ?? ''}`
+        const ownerStr = u?.owners?.length ? u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}`).join(', ') : '—'
+        return `  [${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | Unit ${u?.unit_identifier ?? '?'} — ${u?.address ?? '—'} | ${ownerStr}`
       }),
     ]
 

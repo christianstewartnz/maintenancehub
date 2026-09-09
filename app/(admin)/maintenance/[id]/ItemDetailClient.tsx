@@ -213,9 +213,14 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
         </InfoCard>
 
         <InfoCard title="Owner / Access">
-          <Row label="Owner" value={unit?.owner_name} />
-          <Row label="Phone" value={unit?.owner_phone} />
-          <Row label="Email" value={unit?.owner_email} />
+          {(unit?.owners ?? []).map((o: any, i: number) => (
+            <div key={o.id} style={i > 0 ? { marginTop: 8 } : undefined}>
+              <Row label={i === 0 ? 'Owner' : ''} value={o.name} />
+              {o.phone && <Row label="" value={o.phone} />}
+              {o.email && <Row label="" value={o.email} />}
+            </div>
+          ))}
+          {(!unit?.owners || unit.owners.length === 0) && <Row label="Owner" value={undefined} />}
           {unit?.access_contact_name && <>
             <div style={{ borderTop: '1px solid #f1f1ef', margin: '8px 0' }} />
             <Row label="Access" value={unit?.access_contact_name} />

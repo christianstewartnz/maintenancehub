@@ -20,7 +20,7 @@ export async function POST(
       .single(),
     supabase
       .from('maintenance_items')
-      .select('*, unit:units(id, unit_identifier, lot_number, address, owner_name, owner_phone, owner_email, access_contact_name, access_contact_phone), trade:trades(name)')
+      .select('*, unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, owners:unit_owners(id, name, phone)), trade:trades(name)')
       .eq('work_order_id', id)
       .order('created_at'),
   ])
@@ -74,7 +74,7 @@ export async function POST(
           ${unit?.address ? `<br><span style="color:#787774">${unit.address}</span>` : ''}
         </td>
         <td style="padding: 10px 0; vertical-align: top; color: #787774; font-size: 13px;">
-          ${unit?.owner_name ? `Owner: ${unit.owner_name}${unit.owner_phone ? ` · ${unit.owner_phone}` : ''}<br>` : ''}
+          ${unit?.owners?.length ? unit.owners.map((o: any) => `Owner: ${o.name}${o.phone ? ` · ${o.phone}` : ''}`).join('<br>') + '<br>' : ''}
           ${unit?.access_contact_name ? `Access: ${unit.access_contact_name}${unit.access_contact_phone ? ` · ${unit.access_contact_phone}` : ''}` : ''}
         </td>
         <td style="padding: 10px 0; vertical-align: top; text-align: right; color: #787774; font-size: 13px;">

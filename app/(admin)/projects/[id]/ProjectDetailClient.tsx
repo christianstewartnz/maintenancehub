@@ -2,12 +2,12 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore, Pencil } from 'lucide-react'
+import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore, Pencil, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
-import type { Project, Unit, Trade, Contractor, ProjectTradeAssignment, WorkOrder } from '@/lib/types'
+import type { Project, Unit, UnitOwner, Trade, Contractor, ProjectTradeAssignment, WorkOrder } from '@/lib/types'
 
 interface Props {
   project: Project
@@ -21,10 +21,11 @@ interface Props {
 type Tab = 'units' | 'trades' | 'work-orders'
 
 const emptyUnitForm = {
-  unit_identifier: '', lot_number: '', address: '', owner_name: '', owner_email: '',
-  owner_phone: '', access_contact_name: '', access_contact_email: '', access_contact_phone: '',
+  unit_identifier: '', lot_number: '', address: '',
+  access_contact_name: '', access_contact_email: '', access_contact_phone: '',
   settlement_date: '', notes: '',
 }
+const emptyOwnerForm = { name: '', email: '', phone: '' }
 
 export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades: initialTrades, contractors, assignments: initialAssignments, workOrders }: Props) {
   const [project, setProject] = useState(initialProject)
@@ -34,6 +35,10 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   const [assignments, setAssignments] = useState(initialAssignments)
   const [showUnitModal, setShowUnitModal] = useState(false)
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
+  const [modalOwners, setModalOwners] = useState<UnitOwner[]>([])
+  const [ownerForm, setOwnerForm] = useState(emptyOwnerForm)
+  const [showOwnerForm, setShowOwnerForm] = useState(false)
+  const [savingOwner, setSavingOwner] = useState(false)
   const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<Unit | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState<Trade | null>(null)
@@ -83,25 +88,54 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   function openCreateUnit() {
     setEditingUnit(null)
     setUnitForm(emptyUnitForm)
+    setModalOwners([])
+    setOwnerForm(emptyOwnerForm)
+    setShowOwnerForm(false)
     setShowUnitModal(true)
   }
 
   function openEditUnit(unit: Unit) {
     setEditingUnit(unit)
     setUnitForm({
-      unit_identifier: unit.unit_identifier,
+      unit_identifier: unit.unit_identifier ?? '',
       lot_number: unit.lot_number ?? '',
       address: unit.address ?? '',
-      owner_name: unit.owner_name ?? '',
-      owner_email: unit.owner_email ?? '',
-      owner_phone: unit.owner_phone ?? '',
       access_contact_name: unit.access_contact_name ?? '',
       access_contact_email: unit.access_contact_email ?? '',
       access_contact_phone: unit.access_contact_phone ?? '',
       settlement_date: unit.settlement_date ?? '',
       notes: unit.notes ?? '',
     })
+    setModalOwners(unit.owners ?? [])
+    setOwnerForm(emptyOwnerForm)
+    setShowOwnerForm(false)
     setShowUnitModal(true)
+  }
+
+  async function handleAddOwner() {
+    if (!editingUnit || !ownerForm.name.trim()) return
+    setSavingOwner(true)
+    const { data, error } = await supabase
+      .from('unit_owners')
+      .insert({ unit_id: editingUnit.id, name: ownerForm.name.trim(), email: ownerForm.email || null, phone: ownerForm.phone || null })
+      .select()
+      .single()
+    if (!error && data) {
+      setModalOwners(o => [...o, data])
+      setUnits(prev => prev.map(u => u.id === editingUnit.id ? { ...u, owners: [...(u.owners ?? []), data] } : u))
+      setOwnerForm(emptyOwnerForm)
+      setShowOwnerForm(false)
+    }
+    setSavingOwner(false)
+  }
+
+  async function handleRemoveOwner(ownerId: string) {
+    if (!editingUnit) return
+    const { error } = await supabase.from('unit_owners').delete().eq('id', ownerId)
+    if (!error) {
+      setModalOwners(o => o.filter(x => x.id !== ownerId))
+      setUnits(prev => prev.map(u => u.id === editingUnit.id ? { ...u, owners: (u.owners ?? []).filter(o => o.id !== ownerId) } : u))
+    }
   }
 
   async function handleDeleteUnit() {
@@ -118,18 +152,21 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   async function handleSaveUnit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const payload = { ...unitForm, settlement_date: unitForm.settlement_date || null }
+    const payload = { ...unitForm, unit_identifier: unitForm.unit_identifier || null, settlement_date: unitForm.settlement_date || null }
 
     if (editingUnit) {
       const { data, error } = await supabase.from('units').update(payload).eq('id', editingUnit.id).select().single()
       if (!error && data) {
-        setUnits(u => u.map(x => x.id === data.id ? data : x))
+        setUnits(u => u.map(x => x.id === data.id ? { ...data, owners: modalOwners } : x))
         setShowUnitModal(false)
       }
     } else {
       const { data, error } = await supabase.from('units').insert({ project_id: project.id, ...payload }).select().single()
       if (!error && data) {
-        setUnits(u => [...u, data].sort((a, b) => a.unit_identifier.localeCompare(b.unit_identifier)))
+        setUnits(u => [...u, { ...data, owners: [] }].sort((a, b) => {
+          const n = (v: string | null) => v ? parseInt(v.replace(/\D/g, ''), 10) || Infinity : Infinity
+          return n(a.lot_number) - n(b.lot_number)
+        }))
         setShowUnitModal(false)
         setUnitForm(emptyUnitForm)
       }
@@ -170,7 +207,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   }
 
   function downloadTemplate() {
-    const csv = 'unit_identifier,lot_number,address,owner_name,owner_email,owner_phone,access_contact_name,access_contact_email,access_contact_phone,settlement_date,notes\n'
+    const csv = 'unit_identifier,lot_number,address,access_contact_name,access_contact_email,access_contact_phone,settlement_date,notes\n'
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -273,7 +310,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 <thead>
                   <tr>
                     <th>Construction No.</th><th>Lot</th><th>Address</th>
-                    <th>Owner</th><th>Owner Contact</th><th>Access Contact</th>
+                    <th>Owners</th><th>Owner Contact</th><th>Access Contact</th>
                     <th>Settlement</th><th>Maint. Due</th><th></th>
                   </tr>
                 </thead>
@@ -283,8 +320,8 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td style={{ fontWeight: 500 }}>{u.unit_identifier}</td>
                       <td style={{ color: '#787774' }}>{u.lot_number ?? '—'}</td>
                       <td>{u.address ?? '—'}</td>
-                      <td>{u.owner_name ?? '—'}</td>
-                      <td style={{ fontSize: 13, color: '#787774' }}>{u.owner_email ?? ''}{u.owner_phone ? ` · ${u.owner_phone}` : ''}</td>
+                      <td>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.name).join(', ') : '—'}</td>
+                      <td style={{ fontSize: 13, color: '#787774' }}>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.email).filter(Boolean).join(', ') : ''}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
                       <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
@@ -391,9 +428,53 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 <Field label="Construction Number"><input className="input" value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. C001" /></Field>
                 <Field label="Lot Number"><input className="input" value={unitForm.lot_number} onChange={e => setUnitForm(f => ({ ...f, lot_number: e.target.value }))} placeholder="e.g. Lot 1" /></Field>
                 <Field label="Address" style={{ gridColumn: 'span 2' }}><input className="input" value={unitForm.address} onChange={e => setUnitForm(f => ({ ...f, address: e.target.value }))} placeholder="Full unit address" /></Field>
-                <Field label="Owner Name"><input className="input" value={unitForm.owner_name} onChange={e => setUnitForm(f => ({ ...f, owner_name: e.target.value }))} /></Field>
-                <Field label="Owner Email"><input className="input" type="email" value={unitForm.owner_email} onChange={e => setUnitForm(f => ({ ...f, owner_email: e.target.value }))} /></Field>
-                <Field label="Owner Phone"><input className="input" value={unitForm.owner_phone} onChange={e => setUnitForm(f => ({ ...f, owner_phone: e.target.value }))} /></Field>
+
+                {/* Owners section — only shown when editing an existing unit */}
+                {editingUnit && (
+                  <div style={{ gridColumn: 'span 2', borderTop: '1px solid #e9e9e7', paddingTop: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, fontWeight: 500, color: '#37352f' }}>Owners</label>
+                      {!showOwnerForm && (
+                        <button type="button" className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => setShowOwnerForm(true)}>
+                          <Plus size={13} /> Add Owner
+                        </button>
+                      )}
+                    </div>
+                    {modalOwners.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                        {modalOwners.map(o => (
+                          <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f7f7f5', borderRadius: 6, padding: '8px 12px' }}>
+                            <div>
+                              <span style={{ fontWeight: 500, fontSize: 13 }}>{o.name}</span>
+                              {o.email && <span style={{ fontSize: 12, color: '#787774', marginLeft: 8 }}>{o.email}</span>}
+                              {o.phone && <span style={{ fontSize: 12, color: '#787774', marginLeft: 8 }}>{o.phone}</span>}
+                            </div>
+                            <button type="button" onClick={() => handleRemoveOwner(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#787774', lineHeight: 1 }}>
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {showOwnerForm && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#f7f7f5', borderRadius: 8, padding: 12 }}>
+                        <Field label="Name *"><input className="input" autoFocus value={ownerForm.name} onChange={e => setOwnerForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" /></Field>
+                        <Field label="Email"><input className="input" type="email" value={ownerForm.email} onChange={e => setOwnerForm(f => ({ ...f, email: e.target.value }))} /></Field>
+                        <Field label="Phone"><input className="input" value={ownerForm.phone} onChange={e => setOwnerForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                          <button type="button" className="btn btn-primary" style={{ fontSize: 13 }} onClick={handleAddOwner} disabled={savingOwner || !ownerForm.name.trim()}>
+                            {savingOwner ? 'Adding…' : 'Add'}
+                          </button>
+                          <button type="button" className="btn btn-secondary" style={{ fontSize: 13 }} onClick={() => { setShowOwnerForm(false); setOwnerForm(emptyOwnerForm) }}>Cancel</button>
+                        </div>
+                      </div>
+                    )}
+                    {modalOwners.length === 0 && !showOwnerForm && (
+                      <p style={{ fontSize: 13, color: '#787774', margin: 0 }}>No owners added yet.</p>
+                    )}
+                  </div>
+                )}
+
                 <Field label="Access Contact Name"><input className="input" value={unitForm.access_contact_name} onChange={e => setUnitForm(f => ({ ...f, access_contact_name: e.target.value }))} /></Field>
                 <Field label="Access Contact Email"><input className="input" type="email" value={unitForm.access_contact_email} onChange={e => setUnitForm(f => ({ ...f, access_contact_email: e.target.value }))} /></Field>
                 <Field label="Access Contact Phone"><input className="input" value={unitForm.access_contact_phone} onChange={e => setUnitForm(f => ({ ...f, access_contact_phone: e.target.value }))} /></Field>
