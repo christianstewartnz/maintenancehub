@@ -10,6 +10,7 @@ export interface Project {
   name: string
   address: string | null
   description: string | null
+  development_company: string | null
   status: ProjectStatus
   created_at: string
   updated_at: string

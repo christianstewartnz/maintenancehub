@@ -45,7 +45,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [unitForm, setUnitForm] = useState(emptyUnitForm)
-  const [projectEditForm, setProjectEditForm] = useState({ name: project.name, address: project.address ?? '', description: project.description ?? '' })
+  const [projectEditForm, setProjectEditForm] = useState({ name: project.name, address: project.address ?? '', description: project.description ?? '', development_company: project.development_company ?? '' })
 
   async function toggleArchive() {
     setArchiving(true)
@@ -129,7 +129,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     setSaving(true)
     const { data, error } = await supabase
       .from('projects')
-      .update({ name: projectEditForm.name, address: projectEditForm.address || null, description: projectEditForm.description || null })
+      .update({ name: projectEditForm.name, address: projectEditForm.address || null, description: projectEditForm.description || null, development_company: projectEditForm.development_company || null })
       .eq('id', project.id)
       .select()
       .single()
@@ -222,7 +222,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
           <button
             className="btn btn-ghost"
             style={{ fontSize: 13, color: '#787774', gap: 6 }}
-            onClick={() => { setProjectEditForm({ name: project.name, address: project.address ?? '', description: project.description ?? '' }); setShowProjectEditModal(true) }}
+            onClick={() => { setProjectEditForm({ name: project.name, address: project.address ?? '', description: project.description ?? '', development_company: project.development_company ?? '' }); setShowProjectEditModal(true) }}
           >
             <Pencil size={14} /> Edit Project
           </button>
@@ -409,6 +409,9 @@ export default function ProjectDetailClient({ project: initialProject, units: in
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <Field label="Project name *" required>
                   <input className="input" required value={projectEditForm.name} onChange={e => setProjectEditForm(f => ({ ...f, name: e.target.value }))} />
+                </Field>
+                <Field label="Development Company">
+                  <input className="input" value={projectEditForm.development_company} onChange={e => setProjectEditForm(f => ({ ...f, development_company: e.target.value }))} placeholder="e.g. Stratum Developments Ltd" />
                 </Field>
                 <Field label="Address">
                   <input className="input" value={projectEditForm.address} onChange={e => setProjectEditForm(f => ({ ...f, address: e.target.value }))} placeholder="General project address" />

@@ -67,7 +67,8 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
           <Link href={`/projects/${project?.id}`} style={{ color: '#2383e2', textDecoration: 'none', fontWeight: 500 }}>
             {project?.name}
           </Link>
-          {project?.address && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#787774' }}>{project.address}</p>}
+          {project?.development_company && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#37352f' }}>{project.development_company}</p>}
+          {project?.address && <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>{project.address}</p>}
         </InfoCard>
 
         <InfoCard title="Contractor">

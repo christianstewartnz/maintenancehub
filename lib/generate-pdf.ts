@@ -41,6 +41,7 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
     // ── Project ──────────────────────────────────────────────────────
     sectionLabel('Project')
     doc.fontSize(13).fillColor(DARK).text(project?.name ?? '')
+    if (project?.development_company) doc.fontSize(10).fillColor(GRAY).text(project.development_company)
     if (project?.address) doc.fontSize(10).fillColor(GRAY).text(project.address)
     doc.moveDown(0.8)
 

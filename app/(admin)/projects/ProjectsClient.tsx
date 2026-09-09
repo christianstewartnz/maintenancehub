@@ -16,8 +16,8 @@ export default function ProjectsClient({ projects: initial }: Props) {
   const [showModal, setShowModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [showArchived, setShowArchived] = useState(false)
-  const [form, setForm] = useState({ name: '', address: '', description: '' })
-  const [editForm, setEditForm] = useState({ name: '', address: '', description: '' })
+  const [form, setForm] = useState({ name: '', address: '', description: '', development_company: '' })
+  const [editForm, setEditForm] = useState({ name: '', address: '', description: '', development_company: '' })
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -27,14 +27,14 @@ export default function ProjectsClient({ projects: initial }: Props) {
     setSaving(true)
     const { data, error } = await supabase
       .from('projects')
-      .insert({ name: form.name, address: form.address || null, description: form.description || null, status: 'active' as const })
+      .insert({ name: form.name, address: form.address || null, description: form.description || null, development_company: form.development_company || null, status: 'active' as const })
       .select()
       .single()
 
     if (!error && data) {
       setProjects(prev => [...prev, { ...data, units: [{ count: 0 }] }])
       setShowModal(false)
-      setForm({ name: '', address: '', description: '' })
+      setForm({ name: '', address: '', description: '', development_company: '' })
       router.refresh()
     }
     setSaving(false)
@@ -46,7 +46,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
     setSaving(true)
     const { data, error } = await supabase
       .from('projects')
-      .update({ name: editForm.name, address: editForm.address || null, description: editForm.description || null })
+      .update({ name: editForm.name, address: editForm.address || null, description: editForm.description || null, development_company: editForm.development_company || null })
       .eq('id', editingProject.id)
       .select()
       .single()
@@ -62,7 +62,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
   function openEdit(p: Project, e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    setEditForm({ name: p.name, address: p.address ?? '', description: p.description ?? '' })
+    setEditForm({ name: p.name, address: p.address ?? '', description: p.description ?? '', development_company: p.development_company ?? '' })
     setEditingProject(p)
   }
 
@@ -119,6 +119,10 @@ export default function ProjectsClient({ projects: initial }: Props) {
                   <input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Richmond Villas" />
                 </div>
                 <div>
+                  <label style={labelStyle}>Development Company</label>
+                  <input className="input" value={form.development_company} onChange={e => setForm(f => ({ ...f, development_company: e.target.value }))} placeholder="e.g. Stratum Developments Ltd" />
+                </div>
+                <div>
                   <label style={labelStyle}>Address</label>
                   <input className="input" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="General project address" />
                 </div>
@@ -151,6 +155,10 @@ export default function ProjectsClient({ projects: initial }: Props) {
                 <div>
                   <label style={labelStyle}>Project name *</label>
                   <input className="input" required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Richmond Villas" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Development Company</label>
+                  <input className="input" value={editForm.development_company} onChange={e => setEditForm(f => ({ ...f, development_company: e.target.value }))} placeholder="e.g. Stratum Developments Ltd" />
                 </div>
                 <div>
                   <label style={labelStyle}>Address</label>
@@ -202,7 +210,8 @@ function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p:
                   <ChevronRight size={16} style={{ color: '#b0aea8', flexShrink: 0 }} />
                 </div>
               </div>
-              {p.address && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
+              {p.development_company && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#37352f', fontWeight: 500 }}>{p.development_company}</p>}
+              {p.address && <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
               <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 13, color: '#787774' }}>
                 <span>{p.units?.[0]?.count ?? 0} units</span>
               </div>

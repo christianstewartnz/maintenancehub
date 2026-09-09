@@ -342,6 +342,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                     {/* Project header */}
                     <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: '2px solid #37352f' }}>
                       <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#37352f' }}>{project.name}</h2>
+                      {(project as any).development_company && (
+                        <div style={{ fontSize: 13, color: '#787774', marginTop: 2 }}>{(project as any).development_company}</div>
+                      )}
                       <span style={{ fontSize: 12, color: '#a0a09e' }}>
                         {projectTotal} open item{projectTotal !== 1 ? 's' : ''}
                       </span>
@@ -447,6 +450,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
               <div key={project.id} style={{ marginBottom: 32 }}>
                 <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: '2px solid #37352f' }}>
                   <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#37352f' }}>{project.name}</h2>
+                  {(project as any).development_company && (
+                    <div style={{ fontSize: 13, color: '#787774', marginTop: 2 }}>{(project as any).development_company}</div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {wos.map(({ wo, count }) => {
