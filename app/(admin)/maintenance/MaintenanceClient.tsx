@@ -19,10 +19,25 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
   const [filterProject, setFilterProject] = useState('')
+  const [filterUnit, setFilterUnit] = useState('')
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | ''>('')
   const [filterPriority, setFilterPriority] = useState<Priority | ''>('')
   const [filterContractor, setFilterContractor] = useState('')
   const [sortBy, setSortBy] = useState<'created_at' | 'priority' | 'status'>('created_at')
+
+  const unitsForProject = useMemo(() => {
+    if (!filterProject) return []
+    const seen = new Set<string>()
+    const result: { id: string; unit_identifier: string }[] = []
+    for (const item of items) {
+      const unit = (item.unit as any)
+      if (unit?.id && (unit?.project?.id === filterProject || unit?.project_id === filterProject) && !seen.has(unit.id)) {
+        seen.add(unit.id)
+        result.push({ id: unit.id, unit_identifier: unit.unit_identifier })
+      }
+    }
+    return result.sort((a, b) => a.unit_identifier.localeCompare(b.unit_identifier))
+  }, [items, filterProject])
 
   const filtered = useMemo(() => {
     let result = [...items]
@@ -31,6 +46,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       result = result.filter(i => i.title.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q) || i.item_number.toLowerCase().includes(q))
     }
     if (filterProject) result = result.filter(i => (i.unit as any)?.project?.id === filterProject)
+    if (filterUnit) result = result.filter(i => (i.unit as any)?.id === filterUnit)
     if (filterStatus) result = result.filter(i => i.status === filterStatus)
     if (filterPriority) result = result.filter(i => i.priority === filterPriority)
     if (filterContractor) result = result.filter(i => i.contractor_id === filterContractor)
@@ -43,12 +59,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     else result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return result
-  }, [items, search, filterProject, filterStatus, filterPriority, filterContractor, sortBy])
+  }, [items, search, filterProject, filterUnit, filterStatus, filterPriority, filterContractor, sortBy])
 
-  const hasFilters = !!(search || filterProject || filterStatus || filterPriority || filterContractor)
+  const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterPriority || filterContractor)
 
   function clearFilters() {
-    setSearch(''); setFilterProject(''); setFilterStatus(''); setFilterPriority(''); setFilterContractor('')
+    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterStatus(''); setFilterPriority(''); setFilterContractor('')
   }
 
   function handleCreated(newItem: MaintenanceItem) {
@@ -63,10 +79,16 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#b0aea8' }} />
           <input className="input" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />
         </div>
-        <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => setFilterProject(e.target.value)}>
+        <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }}>
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+        {filterProject && (
+          <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterUnit} onChange={e => setFilterUnit(e.target.value)}>
+            <option value="">All Units</option>
+            {unitsForProject.map(u => <option key={u.id} value={u.id}>{u.unit_identifier}</option>)}
+          </select>
+        )}
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
           <option value="">All Status</option>
           {(['logged','assigned','in_progress','contractor_complete','complete'] as MaintenanceStatus[]).map(s => (
