@@ -72,8 +72,8 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
       if (unit) {
         doc.fontSize(10).fillColor(GRAY)
         const unitLine = unit.lot_number
-          ? `Unit ${unit.unit_identifier} · Lot ${unit.lot_number}`
-          : `Unit ${unit.unit_identifier}`
+          ? `Construction No. ${unit.unit_identifier} · Lot ${unit.lot_number}`
+          : `Construction No. ${unit.unit_identifier}`
         doc.text(unitLine, { indent: 12 })
         if (unit.address) doc.text(`Address: ${unit.address}`, { indent: 12 })
         if (unit.owner_name) {

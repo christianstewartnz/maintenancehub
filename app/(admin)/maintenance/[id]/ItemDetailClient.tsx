@@ -195,7 +195,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <InfoCard title="Location">
           <Row label="Project" value={unit?.project?.name} href={`/projects/${unit?.project?.id}`} />
-          <Row label="Unit" value={unit?.unit_identifier} />
+          <Row label="Construction No." value={unit?.unit_identifier} />
           <Row label="Lot" value={unit?.lot_number} />
           <Row label="Address" value={unit?.address} />
           {unit?.settlement_date && (() => {

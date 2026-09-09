@@ -155,7 +155,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                     <th style={{ width: 40 }}></th>
                     <th>#</th>
                     <th>Title</th>
-                    <th>Unit</th>
+                    <th>Construction No.</th>
                     <th>Status</th>
                     <th>Priority</th>
                   </tr>

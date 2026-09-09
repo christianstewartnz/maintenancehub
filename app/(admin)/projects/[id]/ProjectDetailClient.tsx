@@ -34,6 +34,8 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   const [assignments, setAssignments] = useState(initialAssignments)
   const [showUnitModal, setShowUnitModal] = useState(false)
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null)
+  const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<Unit | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState<Trade | null>(null)
   const [showAddTradeModal, setShowAddTradeModal] = useState(false)
   const [newTradeName, setNewTradeName] = useState('')
@@ -100,6 +102,17 @@ export default function ProjectDetailClient({ project: initialProject, units: in
       notes: unit.notes ?? '',
     })
     setShowUnitModal(true)
+  }
+
+  async function handleDeleteUnit() {
+    if (!confirmDeleteUnit) return
+    setDeleting(true)
+    const { error } = await supabase.from('units').delete().eq('id', confirmDeleteUnit.id)
+    if (!error) {
+      setUnits(u => u.filter(x => x.id !== confirmDeleteUnit.id))
+      setConfirmDeleteUnit(null)
+    }
+    setDeleting(false)
   }
 
   async function handleSaveUnit(e: React.FormEvent) {
@@ -259,7 +272,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Unit ID</th><th>Lot</th><th>Address</th>
+                    <th>Construction No.</th><th>Lot</th><th>Address</th>
                     <th>Owner</th><th>Owner Contact</th><th>Access Contact</th>
                     <th>Settlement</th><th>Maint. Due</th><th></th>
                   </tr>
@@ -275,7 +288,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
                       <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
-                      <td>
+                      <td style={{ display: 'flex', gap: 2 }}>
                         <button
                           className="btn btn-ghost"
                           style={{ padding: '3px 6px', color: '#787774' }}
@@ -283,6 +296,14 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                           title="Edit unit"
                         >
                           <Pencil size={13} />
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: '3px 6px', color: '#787774' }}
+                          onClick={() => setConfirmDeleteUnit(u)}
+                          title="Delete unit"
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>
@@ -367,7 +388,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
             </div>
             <form onSubmit={handleSaveUnit}>
               <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Field label="Unit Identifier *" required><input className="input" required value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. A1" /></Field>
+                <Field label="Construction Number *" required><input className="input" required value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. C001" /></Field>
                 <Field label="Lot Number"><input className="input" value={unitForm.lot_number} onChange={e => setUnitForm(f => ({ ...f, lot_number: e.target.value }))} placeholder="e.g. Lot 1" /></Field>
                 <Field label="Address" style={{ gridColumn: 'span 2' }}><input className="input" value={unitForm.address} onChange={e => setUnitForm(f => ({ ...f, address: e.target.value }))} placeholder="Full unit address" /></Field>
                 <Field label="Owner Name"><input className="input" value={unitForm.owner_name} onChange={e => setUnitForm(f => ({ ...f, owner_name: e.target.value }))} /></Field>
@@ -457,6 +478,31 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete unit modal */}
+      {confirmDeleteUnit && (
+        <div className="modal-overlay" onClick={() => setConfirmDeleteUnit(null)}>
+          <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Delete Unit</h2>
+              <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setConfirmDeleteUnit(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, color: '#37352f' }}>
+                Delete <strong>{confirmDeleteUnit.unit_identifier}</strong>
+                {confirmDeleteUnit.address ? ` — ${confirmDeleteUnit.address}` : ''}?
+              </p>
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: '#787774' }}>This cannot be undone. Any maintenance items linked to this unit will also be affected.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setConfirmDeleteUnit(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ background: '#eb5757', borderColor: '#eb5757' }} onClick={handleDeleteUnit} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete Unit'}
+              </button>
+            </div>
           </div>
         </div>
       )}

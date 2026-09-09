@@ -209,7 +209,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
               <>
                 {/* ── Unit selector ── */}
                 <div style={{ marginBottom: 20 }}>
-                  <label style={labelStyle}>Unit *</label>
+                  <label style={labelStyle}>Construction No. *</label>
                   <select
                     className="input"
                     required
@@ -339,7 +339,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                           <div>
-                            <label style={labelStyle}>Unit *</label>
+                            <label style={labelStyle}>Construction No. *</label>
                             <select className="input" value={aiUnitIds[idx] ?? ''} onChange={e => setAiUnitIds(prev => prev.map((v, i) => i === idx ? e.target.value : v))}>
                               <option value="">Select unit…{r.unit_hint ? ` (AI suggested: ${r.unit_hint})` : ''}</option>
                               {units.map(u => <option key={u.id} value={u.id}>{u.unit_identifier}{u.address ? ` — ${u.address}` : ''}</option>)}

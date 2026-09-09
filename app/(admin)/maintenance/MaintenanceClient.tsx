@@ -144,7 +144,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <table className="data-table">
             <thead>
               <tr>
-                <th>#</th><th>Title</th><th>Project</th><th>Unit</th>
+                <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th>
                 <th>Trade</th><th>Contractor</th><th>Status</th><th>Priority</th>
                 <th>Age</th>
               </tr>

@@ -174,7 +174,7 @@ server.tool(
 
     const text = data.map(i => {
       const unit = i.unit as any
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Unit ${unit?.unit_identifier ?? '?'}`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'}`
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No items found.' }] }
@@ -298,7 +298,7 @@ server.tool(
     const text = data.map(i => {
       const unit = i.unit as any
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Unit ${unit?.unit_identifier ?? '?'} | ${age}d`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'} | ${age}d`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Items overdue by >${days} days (${data.length}):\n\n${text}` }] }

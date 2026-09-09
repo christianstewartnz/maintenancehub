@@ -168,7 +168,7 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
             <tr>
               <th>#</th>
               <th>Title</th>
-              <th>Unit</th>
+              <th>Construction No.</th>
               <th>Address</th>
               <th>Owner</th>
               <th>Trade</th>

@@ -100,7 +100,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           <p style={{ color: '#787774', fontSize: 14 }}>No open items.</p>
         ) : (
           <table className="data-table" style={{ marginBottom: 28 }}>
-            <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Unit</th><th>Status</th><th>Priority</th><th>Age</th></tr></thead>
+            <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Status</th><th>Priority</th><th>Age</th></tr></thead>
             <tbody>
               {openItems.map((item: any) => (
                 <tr key={item.id}>
@@ -121,7 +121,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           <>
             <h3 style={{ fontSize: 14, fontWeight: 600, color: '#787774', marginBottom: 12 }}>Completed ({completedItems.length})</h3>
             <table className="data-table">
-              <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Unit</th><th>Completed</th></tr></thead>
+              <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Completed</th></tr></thead>
               <tbody>
                 {completedItems.slice(0, 20).map((item: any) => (
                   <tr key={item.id}>
