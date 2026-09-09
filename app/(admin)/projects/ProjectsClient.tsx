@@ -186,13 +186,14 @@ export default function ProjectsClient({ projects: initial }: Props) {
 function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p: any, e: React.MouseEvent) => void; style?: React.CSSProperties }) {
   return (
     <div style={style}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
         {projects.map(p => (
           <Link key={p.id} href={`/projects/${p.id}`} style={{ textDecoration: 'none' }}>
             <div
               style={{
-                border: '1px solid #e9e9e7', borderRadius: 8, padding: '16px 18px',
+                border: '1px solid #e9e9e7', borderRadius: 8, padding: '20px 22px',
                 background: 'white', transition: 'box-shadow 0.15s, border-color 0.15s', cursor: 'pointer',
+                minHeight: 110, display: 'flex', flexDirection: 'column',
               }}
               onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#d0d0d0'; (e.currentTarget as HTMLDivElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)' }}
               onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#e9e9e7'; (e.currentTarget as HTMLDivElement).style.boxShadow = 'none' }}
@@ -212,7 +213,7 @@ function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p:
               </div>
               {p.development_company && <p style={{ margin: '4px 0 0', fontSize: 13, color: '#37352f', fontWeight: 500 }}>{p.development_company}</p>}
               {p.address && <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
-              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 13, color: '#787774' }}>
+              <div style={{ display: 'flex', gap: 16, marginTop: 'auto', paddingTop: 12, fontSize: 13, color: '#787774' }}>
                 <span>{p.units?.[0]?.count ?? 0} units</span>
               </div>
             </div>
