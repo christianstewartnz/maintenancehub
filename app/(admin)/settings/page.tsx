@@ -16,7 +16,7 @@ export default async function SettingsPage() {
       .single(),
     supabase
       .from('projects')
-      .select('id, name, address, description, status, created_at, updated_at')
+      .select('id, name, address, description, status, development_company, created_at, updated_at')
       .eq('status', 'active')
       .order('name'),
   ])
