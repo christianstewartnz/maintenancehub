@@ -268,14 +268,15 @@ function WeekSlider({ items, onExpandMonth }: { items: MaintenanceItem[]; onExpa
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {unitGroups.flatMap(g => g.units).slice(0, 3).map(ug => (
                     <div key={ug.unitId} style={{
-                      fontSize: 11, fontWeight: 600, color: '#37352f',
                       background: '#eef4ff', borderRadius: 4, padding: '2px 6px',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      overflow: 'hidden',
                     }} title={`${ug.projectName} · ${ug.unitIdentifier}`}>
-                      {ug.unitIdentifier}
-                      <span style={{ fontWeight: 400, color: '#787774', marginLeft: 3, fontSize: 10 }}>
-                        {ug.items.length} item{ug.items.length !== 1 ? 's' : ''}
-                      </span>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#37352f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ug.unitIdentifier}
+                      </div>
+                      <div style={{ fontSize: 9, color: '#787774', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ug.projectName}
+                      </div>
                     </div>
                   ))}
                   {unitCount > 3 && (
