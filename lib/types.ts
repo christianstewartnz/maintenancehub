@@ -92,6 +92,7 @@ export interface MaintenanceItem {
   created_at: string
   updated_at: string
   completed_at: string | null
+  scheduled_date: string | null
   unit?: Unit & { project?: Project }
   trade?: Trade
   contractor?: Contractor

@@ -31,6 +31,8 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({ title: item.title, description: item.description ?? '', priority: item.priority, trade_id: item.trade_id ?? '' })
   const [saving, setSaving] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState(item.scheduled_date ?? '')
+  const [savingDate, setSavingDate] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -76,6 +78,16 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       .select()
       .single()
     if (data) { setComments(prev => [...prev, data]); setComment('') }
+  }
+
+  async function saveScheduledDate(date: string) {
+    setSavingDate(true)
+    await supabase
+      .from('maintenance_items')
+      .update({ scheduled_date: date || null })
+      .eq('id', item.id)
+    setItem(prev => ({ ...prev, scheduled_date: date || null }))
+    setSavingDate(false)
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -245,6 +257,35 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             <Row label="#" value={workOrder.work_order_number} href={`/work-orders/${workOrder.id}`} />
           </InfoCard>
         )}
+
+        <InfoCard title="Scheduled Date">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="date"
+              className="input"
+              value={scheduledDate}
+              onChange={e => setScheduledDate(e.target.value)}
+              style={{ flex: 1, fontSize: 13 }}
+            />
+            <button
+              className="btn btn-primary"
+              style={{ padding: '6px 12px', fontSize: 13, whiteSpace: 'nowrap' }}
+              disabled={savingDate || scheduledDate === (item.scheduled_date ?? '')}
+              onClick={() => saveScheduledDate(scheduledDate)}
+            >
+              {savingDate ? '…' : 'Save'}
+            </button>
+          </div>
+          {scheduledDate && (
+            <button
+              className="btn btn-ghost"
+              style={{ marginTop: 6, fontSize: 12, color: '#787774', padding: '2px 0' }}
+              onClick={() => { setScheduledDate(''); saveScheduledDate('') }}
+            >
+              Clear date
+            </button>
+          )}
+        </InfoCard>
 
         <InfoCard title="Details">
           <Row label="Item #" value={item.item_number} />

@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime } from '@/lib/utils'
 import type { MaintenanceStatus } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Paperclip } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Paperclip, Calendar } from 'lucide-react'
 
 interface Props {
   contractor: { id: string; company_name: string; contact_name: string | null }
@@ -36,15 +36,19 @@ interface ItemProps {
   onComment: (v: string) => void
   onSubmitComment: () => void
   onUpdateStatus: (s: MaintenanceStatus) => void
+  onSetScheduledDate: (date: string) => void
   isStatusSubmitting: boolean
   isCommentSubmitting: boolean
+  isDateSubmitting: boolean
 }
 
 function ItemRow({
   item, isExpanded, onToggle,
   comment, onComment, onSubmitComment,
-  onUpdateStatus, isStatusSubmitting, isCommentSubmitting,
+  onUpdateStatus, onSetScheduledDate,
+  isStatusSubmitting, isCommentSubmitting, isDateSubmitting,
 }: ItemProps) {
+  const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
   return (
     <div style={{ border: '1px solid #e9e9e7', borderRadius: 6, overflow: 'hidden', background: 'white' }}>
       {/* Row */}
@@ -147,6 +151,35 @@ function ItemRow({
               </button>
             </div>
           )}
+
+          {/* Scheduled date */}
+          <div style={{ marginBottom: 16, padding: '10px 12px', background: '#f7f7f5', borderRadius: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <Calendar size={13} style={{ color: '#787774' }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#37352f' }}>Booked Date</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="date"
+                value={localDate}
+                onChange={e => setLocalDate(e.target.value)}
+                style={{ flex: 1, padding: '6px 10px', fontSize: 13, border: '1px solid #e9e9e7', borderRadius: 6, background: 'white' }}
+              />
+              <button
+                className="btn btn-primary"
+                style={{ padding: '6px 12px', fontSize: 13, whiteSpace: 'nowrap' }}
+                disabled={isDateSubmitting || localDate === (item.scheduled_date ?? '')}
+                onClick={() => onSetScheduledDate(localDate)}
+              >
+                {isDateSubmitting ? '…' : 'Save'}
+              </button>
+            </div>
+            {item.scheduled_date && (
+              <p style={{ margin: '6px 0 0', fontSize: 12, color: '#787774' }}>
+                Currently booked: {new Date(item.scheduled_date + 'T00:00:00').toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+              </p>
+            )}
+          </div>
 
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Comments</div>
           {(item.comments ?? []).map((c: any) => (
@@ -263,6 +296,17 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     })
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
     setSubmitting(prev => ({ ...prev, [itemId]: false }))
+  }
+
+  async function setScheduledDate(itemId: string, date: string) {
+    setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: true }))
+    await fetch(`/api/portal/${token}/set-scheduled-date`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, scheduled_date: date || null }),
+    })
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, scheduled_date: date || null } : i))
+    setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: false }))
   }
 
   async function submitComment(itemId: string) {
@@ -419,8 +463,10 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     onComment={val => setComments(prev => ({ ...prev, [item.id]: val }))}
                                     onSubmitComment={() => submitComment(item.id)}
                                     onUpdateStatus={status => updateStatus(item.id, status)}
+                                    onSetScheduledDate={date => setScheduledDate(item.id, date)}
                                     isStatusSubmitting={!!submitting[item.id]}
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
+                                    isDateSubmitting={!!submitting[`date-${item.id}`]}
                                   />
                                 ))}
                               </div>
