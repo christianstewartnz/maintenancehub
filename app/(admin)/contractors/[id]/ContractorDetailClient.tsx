@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X } from 'lucide-react'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -100,7 +100,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           <p style={{ color: '#787774', fontSize: 14 }}>No open items.</p>
         ) : (
           <table className="data-table" style={{ marginBottom: 28 }}>
-            <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Status</th><th>Priority</th><th>Age</th></tr></thead>
+            <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Status</th><th>Age</th></tr></thead>
             <tbody>
               {openItems.map((item: any) => (
                 <tr key={item.id}>
@@ -109,7 +109,6 @@ export default function ContractorDetailClient({ contractor: initial, assignment
                   <td style={{ fontSize: 13, color: '#787774' }}>{item.unit?.project?.name ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>{item.unit?.unit_identifier ?? '—'}</td>
                   <td><StatusBadge status={item.status} /></td>
-                  <td><PriorityBadge priority={item.priority} /></td>
                   <td style={{ fontSize: 13, color: '#787774' }}>{formatDate(item.created_at)}</td>
                 </tr>
               ))}

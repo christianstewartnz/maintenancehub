@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { WorkOrderStatusBadge, StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { WorkOrderStatusBadge, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 import { Download, Send, Pencil, Check, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -173,7 +173,6 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
               <th>Owner</th>
               <th>Trade</th>
               <th>Status</th>
-              <th>Priority</th>
             </tr>
           </thead>
           <tbody>
@@ -199,7 +198,6 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
                   </td>
                   <td style={{ fontSize: 13, color: '#787774' }}>{item.trade?.name ?? '—'}</td>
                   <td><StatusBadge status={item.status} /></td>
-                  <td><PriorityBadge priority={item.priority} /></td>
                 </tr>
               )
             })}

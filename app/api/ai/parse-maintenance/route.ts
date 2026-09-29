@@ -30,7 +30,6 @@ Parse the following text and return a JSON array of maintenance items. Each item
 - title: short title of the issue (max 60 chars)
 - description: more detailed description (or null if none)
 - trade_hint: the most likely trade from the available list (or null if unclear)
-- priority: one of "low", "medium", "high", "urgent" based on urgency cues in the text
 
 Return ONLY a valid JSON array, no other text.
 

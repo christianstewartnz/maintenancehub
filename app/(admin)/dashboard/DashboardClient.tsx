@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronRight, AlertTriangle, Clock, CalendarDays, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getAgeClass } from '@/lib/utils'
 import type { Project, MaintenanceItem, MaintenanceStatus } from '@/lib/types'
 
@@ -111,7 +111,6 @@ function UnitCard({ group }: { group: UnitGroup }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <StatusBadge status={item.status} />
-                <PriorityBadge priority={item.priority} />
                 {trade && (
                   <span style={{ fontSize: 11, color: '#787774', background: '#f0f0ee', borderRadius: 4, padding: '1px 6px' }}>
                     {trade}
@@ -527,7 +526,7 @@ export default function DashboardClient({ projects, items, scheduledItems }: Pro
                         <div style={{ padding: '0 20px 12px' }}>
                           <table className="data-table">
                             <thead>
-                              <tr><th>#</th><th>Title</th><th>Status</th><th>Priority</th><th>Age</th><th>Scheduled</th><th>Contractor</th></tr>
+                              <tr><th>#</th><th>Title</th><th>Status</th><th>Age</th><th>Scheduled</th><th>Contractor</th></tr>
                             </thead>
                             <tbody>
                               {unit.items.map(item => {
@@ -539,7 +538,6 @@ export default function DashboardClient({ projects, items, scheduledItems }: Pro
                                       <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>{item.title}</Link>
                                     </td>
                                     <td><StatusBadge status={item.status} /></td>
-                                    <td><PriorityBadge priority={item.priority} /></td>
                                     <td style={{ fontSize: 13, color: days >= RED_DAYS ? '#e03c3c' : days >= AMBER_DAYS ? '#9a6700' : '#787774' }}>{days}d</td>
                                     <td style={{ fontSize: 13, color: '#787774' }}>
                                       {item.scheduled_date ? new Date(item.scheduled_date + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : '—'}

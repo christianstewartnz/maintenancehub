@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     // Query maintenance items
     let query = serviceSupabase
       .from('maintenance_items')
-      .select('id, item_number, title, status, priority, created_at, completed_at, unit:units(unit_identifier, project:projects(id, name))')
+      .select('id, item_number, title, status, created_at, completed_at, unit:units(unit_identifier, project:projects(id, name))')
 
     if (prefs.report_scope === 'per_project' && prefs.report_projects?.length > 0) {
       // Filter to specific projects via units

@@ -171,7 +171,7 @@ server.tool(
 
     const { data: items } = await supabase
       .from('maintenance_items')
-      .select('status, priority, created_at')
+      .select('status, created_at')
       .in('unit_id', unitIds)
 
     if (!items?.length) return { content: [{ type: 'text', text: `${proj.name} — no maintenance items.` }] }
@@ -513,7 +513,7 @@ server.tool(
 
     const { data: open } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, unit:units(unit_identifier, project:projects(name))')
       .eq('contractor_id', c.id)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
@@ -634,7 +634,7 @@ server.tool(
 
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, created_at, unit:units(unit_identifier)')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier)')
       .in('unit_id', unitIds)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
@@ -648,7 +648,7 @@ server.tool(
     const text = data.map(i => {
       const unit = (i.unit as any)?.unit_identifier ?? '?'
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | Unit ${unit} | ${age}d old`
+      return `[${i.item_number}] ${i.title} | ${i.status} | Unit ${unit} | ${age}d old`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Open items for ${proj.name}:\n\n${text}` }] }
@@ -661,18 +661,16 @@ server.tool(
   {
     status: z.enum(['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete', 'all']).optional(),
     project: z.string().optional().describe('Project name (partial) or project ID'),
-    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     limit: z.number().min(1).max(100).optional().describe('Max results (default 20)'),
   },
-  async ({ status, project, priority, limit = 20 }) => {
+  async ({ status, project, limit = 20 }) => {
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, created_at, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier, project:projects(name))')
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (status && status !== 'all') query = query.eq('status', status)
-    if (priority) query = query.eq('priority', priority)
 
     if (project) {
       const proj = await resolveProjectAny(project)
@@ -687,7 +685,7 @@ server.tool(
 
     const text = data.map(i => {
       const unit = i.unit as any
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'}`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'}`
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No items found.' }] }
@@ -729,7 +727,7 @@ server.tool(
     const u = item.unit as any
     const lines = [
       `[${item.item_number}] ${item.title}`,
-      `Status: ${item.status} | Priority: ${item.priority}`,
+      `Status: ${item.status}`,
       `Project: ${(u?.project as any)?.name ?? '—'}`,
       `Unit: Construction No. ${u?.unit_identifier ?? '—'} | Lot ${u?.lot_number ?? '—'}`,
       `Address: ${u?.address ?? '—'}`,
@@ -760,13 +758,12 @@ server.tool(
     unit_id: z.string().describe('Unit ID (from list_units)'),
     title: z.string().describe('Short title of the issue'),
     description: z.string().optional(),
-    priority: z.enum(['low', 'medium', 'high', 'urgent']),
     trade_id: z.string().optional().describe('Trade ID if known (from list_trades)'),
   },
-  async ({ unit_id, title, description, priority, trade_id }) => {
+  async ({ unit_id, title, description, trade_id }) => {
     const { data, error } = await supabase
       .from('maintenance_items')
-      .insert({ unit_id, title, description: description ?? null, priority, trade_id: trade_id ?? null })
+      .insert({ unit_id, title, description: description ?? null, trade_id: trade_id ?? null })
       .select('item_number, title, status')
       .single()
 
@@ -777,22 +774,20 @@ server.tool(
 
 server.tool(
   'update_maintenance_item',
-  'Edit a maintenance item\'s title, description, priority, or trade',
+  'Edit a maintenance item\'s title, description, or trade',
   {
     item_number: z.string().describe('Item number e.g. "MH-0042"'),
     title: z.string().optional(),
     description: z.string().optional(),
-    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
     trade_id: z.string().optional().describe('Trade ID (from list_trades), or empty string to clear'),
   },
-  async ({ item_number, title, description, priority, trade_id }) => {
+  async ({ item_number, title, description, trade_id }) => {
     const item = await resolveItemByNumber(item_number)
     if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
 
     const updates: Record<string, unknown> = {}
     if (title !== undefined) updates.title = title
     if (description !== undefined) updates.description = description
-    if (priority !== undefined) updates.priority = priority
     if (trade_id !== undefined) updates.trade_id = trade_id === '' ? null : trade_id
 
     const { error } = await supabase.from('maintenance_items').update(updates).eq('id', item.id)
@@ -920,7 +915,7 @@ server.tool(
 
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, created_at, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier, project:projects(name))')
       .in('status', ['logged', 'assigned', 'in_progress'])
       .lt('created_at', cutoff)
       .order('created_at')
@@ -934,7 +929,7 @@ server.tool(
     const text = data.map(i => {
       const unit = i.unit as any
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'} | ${age}d`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'} | ${age}d`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Items overdue by >${days} days (${data.length}):\n\n${text}` }] }
@@ -951,7 +946,7 @@ server.tool(
     const { data, error } = await supabase
       .from('maintenance_items')
       .select(`
-        item_number, title, priority, updated_at,
+        item_number, title, updated_at,
         unit:units(unit_identifier, project:projects(name)),
         contractor:contractors(company_name)
       `)
@@ -964,7 +959,7 @@ server.tool(
     const text = data.map(i => {
       const unit = i.unit as any
       const age = Math.floor((Date.now() - new Date(i.updated_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.priority} | ${(unit?.project as any)?.name ?? '?'} · ${unit?.unit_identifier ?? '?'} | ${(i.contractor as any)?.company_name ?? '—'} | waiting ${age}d`
+      return `[${i.item_number}] ${i.title} | ${(unit?.project as any)?.name ?? '?'} · ${unit?.unit_identifier ?? '?'} | ${(i.contractor as any)?.company_name ?? '—'} | waiting ${age}d`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Sign-off queue (${data.length}):\n\n${text}` }] }
@@ -1078,7 +1073,7 @@ server.tool(
 
     const { data: items } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, status, priority, unit:units(unit_identifier, address, owners:unit_owners(name, phone)), trade:trades(name)')
+      .select('item_number, title, status, unit:units(unit_identifier, address, owners:unit_owners(name, phone)), trade:trades(name)')
       .eq('work_order_id', wo.id)
       .order('item_number')
 
@@ -1094,7 +1089,7 @@ server.tool(
       ...(items ?? []).map(i => {
         const u = i.unit as any
         const ownerStr = u?.owners?.length ? u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}`).join(', ') : '—'
-        return `  [${i.item_number}] ${i.title} | ${i.status} | ${i.priority} | Unit ${u?.unit_identifier ?? '?'} — ${u?.address ?? '—'} | ${ownerStr}`
+        return `  [${i.item_number}] ${i.title} | ${i.status} | Unit ${u?.unit_identifier ?? '?'} — ${u?.address ?? '—'} | ${ownerStr}`
       }),
     ]
 

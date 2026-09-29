@@ -11,7 +11,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
 
   const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes] = await Promise.all([
     supabase.from('maintenance_items').select(`
-      id, item_number, title, description, status, priority, created_at, updated_at, completed_at,
+      id, item_number, title, description, status, created_at, updated_at, completed_at,
       contractor_id, trade_id, unit_id,
       unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, settlement_date, owners:unit_owners(id, name, email, phone), project:projects(id, name)),
       trade:trades(id, name),

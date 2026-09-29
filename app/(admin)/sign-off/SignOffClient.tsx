@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { PriorityBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, formatDateTime } from '@/lib/utils'
 import { CheckCheck, RotateCcw, MessageSquare, Clock } from 'lucide-react'
 
@@ -12,7 +11,6 @@ interface Item {
   id: string
   item_number: string
   title: string
-  priority: string
   created_at: string
   updated_at: string
   contractor_id: string | null
@@ -227,7 +225,6 @@ export default function SignOffClient({ items: initial }: Props) {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
                                   <span style={{ fontSize: 12, color: '#a0a09e' }}>{item.item_number}</span>
-                                  <PriorityBadge priority={item.priority as any} />
                                   <span style={{
                                     display: 'flex', alignItems: 'center', gap: 4,
                                     fontSize: 12, color: days >= 7 ? '#e03c3c' : '#9a6700',

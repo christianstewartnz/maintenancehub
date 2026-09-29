@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, MaintenanceItemAttachment, MaintenanceStatus, Priority, Trade } from '@/lib/types'
+import type { MaintenanceItem, ActivityLog, ContractorComment, MaintenanceItemAttachment, MaintenanceStatus, Trade } from '@/lib/types'
 import { Pencil } from 'lucide-react'
 
 interface Props {
@@ -17,9 +17,6 @@ interface Props {
   trades: Trade[]
 }
 
-const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent']
-const PRIORITY_LABELS: Record<Priority, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
-
 export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, contractors, trades }: Props) {
   const [item, setItem] = useState(initial)
   const [activity, setActivity] = useState(initialActivity)
@@ -29,7 +26,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const [assigningContractor, setAssigningContractor] = useState(false)
   const [selectedContractor, setSelectedContractor] = useState(item.contractor_id ?? '')
   const [showEditModal, setShowEditModal] = useState(false)
-  const [editForm, setEditForm] = useState({ title: item.title, description: item.description ?? '', priority: item.priority, trade_id: item.trade_id ?? '' })
+  const [editForm, setEditForm] = useState({ title: item.title, description: item.description ?? '', trade_id: item.trade_id ?? '' })
   const [saving, setSaving] = useState(false)
   const [scheduledDate, setScheduledDate] = useState(item.scheduled_date ?? '')
   const [savingDate, setSavingDate] = useState(false)
@@ -98,7 +95,6 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       .update({
         title: editForm.title,
         description: editForm.description || null,
-        priority: editForm.priority,
         trade_id: editForm.trade_id || null,
       })
       .eq('id', item.id)
@@ -113,7 +109,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   }
 
   function openEdit() {
-    setEditForm({ title: item.title, description: item.description ?? '', priority: item.priority, trade_id: item.trade_id ?? '' })
+    setEditForm({ title: item.title, description: item.description ?? '', trade_id: item.trade_id ?? '' })
     setShowEditModal(true)
   }
 
@@ -130,7 +126,6 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <StatusBadge status={item.status} />
-            <PriorityBadge priority={item.priority} />
             <button
               className="btn btn-ghost"
               style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 13, color: '#787774', display: 'flex', alignItems: 'center', gap: 5 }}
@@ -317,12 +312,6 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
                 <div>
                   <label style={labelStyle}>Description</label>
                   <textarea className="input" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} style={{ minHeight: 80 }} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Priority</label>
-                  <select className="input" value={editForm.priority} onChange={e => setEditForm(f => ({ ...f, priority: e.target.value as Priority }))}>
-                    {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
-                  </select>
                 </div>
                 {trades.length > 0 && (
                   <div>

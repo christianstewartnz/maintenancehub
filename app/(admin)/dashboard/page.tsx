@@ -8,7 +8,7 @@ export default async function DashboardPage() {
   const supabase = await createClient()
 
   const itemSelect = `
-    id, item_number, title, status, priority, created_at, updated_at, scheduled_date,
+    id, item_number, title, status, created_at, updated_at, scheduled_date,
     unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
     contractor:contractors(id, company_name)
   `

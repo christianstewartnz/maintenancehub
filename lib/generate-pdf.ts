@@ -63,9 +63,6 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
 
       const unit = item.unit as any
       const tradeName: string = item.trade?.name ?? ''
-      const priority: string = item.priority
-        ? item.priority.charAt(0).toUpperCase() + item.priority.slice(1)
-        : ''
 
       doc.fontSize(12).fillColor(DARK).text(`${item.item_number}  —  ${item.title}`)
 
@@ -92,8 +89,7 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
         }
       }
 
-      const meta = [tradeName, priority].filter(Boolean).join('  ·  ')
-      if (meta) doc.fontSize(10).fillColor(GRAY).text(meta, { indent: 12 })
+      if (tradeName) doc.fontSize(10).fillColor(GRAY).text(tradeName, { indent: 12 })
 
       if (item.description) {
         doc.moveDown(0.3)

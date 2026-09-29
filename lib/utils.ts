@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { MaintenanceStatus, Priority, WorkOrderStatus } from './types'
+import { MaintenanceStatus, WorkOrderStatus } from './types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -49,20 +49,6 @@ export const STATUS_COLORS: Record<MaintenanceStatus, string> = {
   in_progress: 'badge-amber',
   contractor_complete: 'badge-orange',
   complete: 'badge-green',
-}
-
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
-}
-
-export const PRIORITY_COLORS: Record<Priority, string> = {
-  low: 'priority-low',
-  medium: 'priority-medium',
-  high: 'priority-high',
-  urgent: 'priority-urgent',
 }
 
 export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {

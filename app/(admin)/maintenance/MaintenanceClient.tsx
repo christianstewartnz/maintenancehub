@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, Search, X } from 'lucide-react'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getAgeClass, formatDate } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
-import type { MaintenanceItem, MaintenanceStatus, Priority } from '@/lib/types'
+import type { MaintenanceItem, MaintenanceStatus } from '@/lib/types'
 
 interface Props {
   items: MaintenanceItem[]
@@ -21,9 +21,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [filterProject, setFilterProject] = useState('')
   const [filterUnit, setFilterUnit] = useState('')
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | ''>('')
-  const [filterPriority, setFilterPriority] = useState<Priority | ''>('')
   const [filterContractor, setFilterContractor] = useState('')
-  const [sortBy, setSortBy] = useState<'created_at' | 'priority' | 'status'>('created_at')
+  const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
 
   const unitsForProject = useMemo(() => {
     if (!filterProject) return []
@@ -48,23 +47,20 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     if (filterProject) result = result.filter(i => (i.unit as any)?.project?.id === filterProject)
     if (filterUnit) result = result.filter(i => (i.unit as any)?.id === filterUnit)
     if (filterStatus) result = result.filter(i => i.status === filterStatus)
-    if (filterPriority) result = result.filter(i => i.priority === filterPriority)
     if (filterContractor) result = result.filter(i => i.contractor_id === filterContractor)
 
-    const PRIORITY_ORDER: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
     const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
 
-    if (sortBy === 'priority') result.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
-    else if (sortBy === 'status') result.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+    if (sortBy === 'status') result.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
     else result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return result
-  }, [items, search, filterProject, filterUnit, filterStatus, filterPriority, filterContractor, sortBy])
+  }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, sortBy])
 
-  const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterPriority || filterContractor)
+  const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterContractor)
 
   function clearFilters() {
-    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterStatus(''); setFilterPriority(''); setFilterContractor('')
+    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterStatus(''); setFilterContractor('')
   }
 
   function handleCreated(newItem: MaintenanceItem) {
@@ -95,17 +91,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
           ))}
         </select>
-        <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterPriority} onChange={e => setFilterPriority(e.target.value as any)}>
-          <option value="">All Priority</option>
-          {(['urgent','high','medium','low'] as Priority[]).map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-        </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterContractor} onChange={e => setFilterContractor(e.target.value)}>
           <option value="">All Contractors</option>
           {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
           <option value="created_at">Sort: Date</option>
-          <option value="priority">Sort: Priority</option>
           <option value="status">Sort: Status</option>
         </select>
         {hasFilters && (
@@ -145,7 +136,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             <thead>
               <tr>
                 <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th>
-                <th>Trade</th><th>Contractor</th><th>Status</th><th>Priority</th>
+                <th>Trade</th><th>Contractor</th><th>Status</th>
                 <th>Age</th>
               </tr>
             </thead>
@@ -167,7 +158,6 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.trade as any)?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.contractor as any)?.company_name ?? '—'}</td>
                     <td><StatusBadge status={item.status} /></td>
-                    <td><PriorityBadge priority={item.priority} /></td>
                     <td style={{ fontSize: 13, color: days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
                       {days}d
                     </td>

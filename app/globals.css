@@ -46,19 +46,6 @@ body {
 .badge-green-light { background: #d4edda; color: #1d6a38; }
 .badge-green  { background: #b7dfb4; color: #0d4a22; }
 
-/* ── Priority indicators ────────────────────────────────────────────── */
-.priority-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.priority-low    { background: #b0aea8; }
-.priority-medium { background: #e2b714; }
-.priority-high   { background: #e07c3c; }
-.priority-urgent { background: #e03c3c; }
-
 /* ── Age / SLA tinting ──────────────────────────────────────────────── */
 .age-amber { background-color: #fffbeb !important; }
 .age-red   { background-color: #fff1f1 !important; }

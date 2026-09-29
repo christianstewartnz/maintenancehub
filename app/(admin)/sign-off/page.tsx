@@ -10,7 +10,7 @@ export default async function SignOffPage() {
   const { data: items } = await supabase
     .from('maintenance_items')
     .select(`
-      id, item_number, title, priority, created_at, updated_at, contractor_id,
+      id, item_number, title, created_at, updated_at, contractor_id,
       unit:units(id, unit_identifier, address, project:projects(id, name)),
       contractor:contractors(id, company_name, contact_name, email)
     `)

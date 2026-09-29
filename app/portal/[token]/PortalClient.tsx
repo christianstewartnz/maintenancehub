@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime } from '@/lib/utils'
 import type { MaintenanceStatus } from '@/lib/types'
 import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Paperclip, Calendar } from 'lucide-react'
@@ -60,7 +60,6 @@ function ItemRow({
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 3 }}>
             <span style={{ fontSize: 11, color: '#a0a09e' }}>{item.item_number}</span>
             <StatusBadge status={item.status} />
-            <PriorityBadge priority={item.priority} />
             {item.work_order && (
               <span style={{
                 fontSize: 11, fontWeight: 600, color: '#2f6fcf',

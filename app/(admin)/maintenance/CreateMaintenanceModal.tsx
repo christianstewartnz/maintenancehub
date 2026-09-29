@@ -3,16 +3,15 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, Sparkles, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { MaintenanceItem, Priority } from '@/lib/types'
+import type { MaintenanceItem } from '@/lib/types'
 
 interface LineItem {
   trade_id: string
   title: string
   description: string
-  priority: Priority
 }
 
-const emptyLine = (): LineItem => ({ trade_id: '', title: '', description: '', priority: 'medium' })
+const emptyLine = (): LineItem => ({ trade_id: '', title: '', description: '' })
 
 interface Props {
   projects: { id: string; name: string }[]
@@ -32,7 +31,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
   const [aiText, setAiText] = useState('')
   const [aiParsing, setAiParsing] = useState(false)
   const [aiError, setAiError] = useState('')
-  const [aiResults, setAiResults] = useState<{ unit_hint: string | null; title: string; description: string | null; trade_hint: string | null; priority: Priority }[]>([])
+  const [aiResults, setAiResults] = useState<{ unit_hint: string | null; title: string; description: string | null; trade_hint: string | null }[]>([])
   const [aiUnitIds, setAiUnitIds] = useState<string[]>([])
   const [aiTradeIds, setAiTradeIds] = useState<string[]>([])
   const supabase = createClient()
@@ -94,10 +93,9 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
           trade_id: tid || null,
           title: r.title,
           description: r.description || null,
-          priority: r.priority,
         })
         .select(`
-          id, item_number, title, status, priority, created_at, updated_at,
+          id, item_number, title, status, created_at, updated_at,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -133,10 +131,9 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
           trade_id: line.trade_id || null,
           title: line.title.trim(),
           description: line.description.trim() || null,
-          priority: line.priority,
         })
         .select(`
-          id, item_number, title, status, priority, created_at, updated_at,
+          id, item_number, title, status, created_at, updated_at,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -244,7 +241,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
                         </button>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div style={{ gridColumn: 'span 1' }}>
                         <label style={labelStyle}>Title *</label>
                         <input className="input" value={line.title} onChange={e => updateLine(idx, 'title', e.target.value)} placeholder="e.g. Leaking kitchen tap" required={idx === 0} />
@@ -256,16 +253,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
                           {trades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </select>
                       </div>
-                      <div>
-                        <label style={labelStyle}>Priority</label>
-                        <select className="input" value={line.priority} onChange={e => updateLine(idx, 'priority', e.target.value as Priority)}>
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                          <option value="urgent">Urgent</option>
-                        </select>
-                      </div>
-                      <div style={{ gridColumn: 'span 3' }}>
+                      <div style={{ gridColumn: 'span 2' }}>
                         <label style={labelStyle}>Description</label>
                         <textarea className="input" value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} placeholder="Detailed description of the issue…" style={{ minHeight: 60 }} />
                       </div>
@@ -318,24 +306,13 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
                     </p>
                     {aiResults.map((r, idx) => (
                       <div key={idx} style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px', marginBottom: 10 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
-                          <div>
-                            <label style={labelStyle}>Title</label>
-                            <input
-                              className="input"
-                              value={r.title}
-                              onChange={e => setAiResults(prev => prev.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
-                            />
-                          </div>
-                          <div>
-                            <label style={labelStyle}>Priority</label>
-                            <select className="input" value={r.priority} onChange={e => setAiResults(prev => prev.map((x, i) => i === idx ? { ...x, priority: e.target.value as Priority } : x))}>
-                              <option value="low">Low</option>
-                              <option value="medium">Medium</option>
-                              <option value="high">High</option>
-                              <option value="urgent">Urgent</option>
-                            </select>
-                          </div>
+                        <div style={{ marginBottom: 10 }}>
+                          <label style={labelStyle}>Title</label>
+                          <input
+                            className="input"
+                            value={r.title}
+                            onChange={e => setAiResults(prev => prev.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
+                          />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                           <div>

@@ -1,6 +1,5 @@
 export type ProjectStatus = 'active' | 'archived'
 export type MaintenanceStatus = 'logged' | 'assigned' | 'in_progress' | 'contractor_complete' | 'complete'
-export type Priority = 'low' | 'medium' | 'high' | 'urgent'
 export type WorkOrderStatus = 'draft' | 'sent' | 'in_progress' | 'complete'
 export type ReportFrequency = 'daily' | 'weekly' | 'none'
 export type ReportScope = 'all_projects' | 'per_project'
@@ -93,7 +92,6 @@ export interface MaintenanceItem {
   title: string
   description: string | null
   status: MaintenanceStatus
-  priority: Priority
   contractor_id: string | null
   work_order_id: string | null
   created_at: string

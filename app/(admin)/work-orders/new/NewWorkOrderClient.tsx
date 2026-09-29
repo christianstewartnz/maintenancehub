@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 
 interface Props {
@@ -33,7 +33,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
     setLoadingItems(true)
     supabase
       .from('maintenance_items')
-      .select('id, item_number, title, description, status, priority, unit:units!inner(id, unit_identifier, address, project_id)')
+      .select('id, item_number, title, description, status, unit:units!inner(id, unit_identifier, address, project_id)')
       .eq('contractor_id', contractorId)
       .eq('unit.project_id', projectId)
       .is('work_order_id', null)
@@ -157,7 +157,6 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                     <th>Title</th>
                     <th>Construction No.</th>
                     <th>Status</th>
-                    <th>Priority</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,7 +175,6 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                           {unit?.address && <span style={{ color: '#787774' }}> — {unit.address}</span>}
                         </td>
                         <td><StatusBadge status={item.status} /></td>
-                        <td><PriorityBadge priority={item.priority} /></td>
                       </tr>
                     )
                   })}
