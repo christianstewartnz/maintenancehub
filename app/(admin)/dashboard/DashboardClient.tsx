@@ -414,14 +414,14 @@ export default function DashboardClient({ projects, items, scheduledItems }: Pro
     const projectItems = filteredItems.filter(
       item => (item.unit as any)?.project_id === project.id || (item.unit as any)?.project?.id === project.id
     )
-    const unitMap = new Map<string, { unitId: string; unitIdentifier: string; address: string | null; items: MaintenanceItem[] }>()
+    const unitMap = new Map<string, { unitId: string; unitIdentifier: string | null; address: string | null; items: MaintenanceItem[] }>()
     for (const item of projectItems) {
       const unit = item.unit as any
       if (!unit) continue
       if (!unitMap.has(unit.id)) unitMap.set(unit.id, { unitId: unit.id, unitIdentifier: unit.unit_identifier, address: unit.address, items: [] })
       unitMap.get(unit.id)!.items.push(item)
     }
-    const units = Array.from(unitMap.values()).sort((a, b) => a.unitIdentifier.localeCompare(b.unitIdentifier))
+    const units = Array.from(unitMap.values()).sort((a, b) => (a.unitIdentifier ?? '').localeCompare(b.unitIdentifier ?? ''))
     const overdueCount = projectItems.filter(i => getDaysSince(i.created_at) >= RED_DAYS).length
     const awaitingConfirm = projectItems.filter(i => i.status === 'contractor_complete').length
     return { project, units, totalOpen: projectItems.length, overdueCount, awaitingConfirm }
@@ -517,7 +517,7 @@ export default function DashboardClient({ projects, items, scheduledItems }: Pro
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                       >
                         {expandedUnits.has(unit.unitId) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        <span style={{ fontWeight: 500, color: '#37352f' }}>{unit.unitIdentifier}</span>
+                        <span style={{ fontWeight: 500, color: '#37352f' }}>{unit.unitIdentifier ?? unit.address ?? 'Unnamed unit'}</span>
                         {unit.address && <span style={{ color: '#787774', fontSize: 13 }}>{unit.address}</span>}
                         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#787774' }}>{unit.items.length} item{unit.items.length !== 1 ? 's' : ''}</span>
                       </button>
