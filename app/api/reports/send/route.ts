@@ -119,3 +119,6 @@ export async function POST(req: Request) {
 
   return Response.json({ sent })
 }
+
+// Vercel Cron invokes routes with GET
+export { POST as GET }
