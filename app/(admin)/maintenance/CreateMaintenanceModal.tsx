@@ -23,7 +23,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')
   const [projectId, setProjectId] = useState('')
   const [unitId, setUnitId] = useState('')
-  const [units, setUnits] = useState<{ id: string; unit_identifier: string; address: string | null }[]>([])
+  const [units, setUnits] = useState<{ id: string; unit_identifier: string | null; address: string | null }[]>([])
   const [trades, setTrades] = useState<{ id: string; name: string }[]>([])
   const [lines, setLines] = useState<LineItem[]>([emptyLine()])
   const [saving, setSaving] = useState(false)
@@ -52,7 +52,7 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
   useEffect(() => {
     if (aiResults.length === 0) return
     setAiUnitIds(aiResults.map(r => {
-      const match = units.find(u => r.unit_hint && u.unit_identifier.toLowerCase().includes(r.unit_hint.toLowerCase()))
+      const match = units.find(u => r.unit_hint && u.unit_identifier?.toLowerCase().includes(r.unit_hint.toLowerCase()))
       return match?.id ?? ''
     }))
     setAiTradeIds(aiResults.map(r => {
