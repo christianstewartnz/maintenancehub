@@ -87,9 +87,14 @@ export function contractorNewItemsEmail(opts: {
   contactName: string | null
   items: { itemNumber: string; title: string; unitIdentifier: string | null; address: string | null; projectName: string | null }[]
   portalUrl: string
-}): { subject: string; html: string } {
-  const { contractorName, contactName, items, portalUrl } = opts
+  /** The staff member who clicked Notify; shown as the sign-off. */
+  sender?: { name: string | null; email: string | null }
+}): { subject: string; html: string; text: string } {
+  const { contractorName, contactName, items, portalUrl, sender } = opts
   const n = items.length
+  const senderName = sender?.name?.trim() || null
+  const senderEmail = sender?.email?.trim() || null
+  const hasSignOff = !!(senderName || senderEmail)
 
   // Group by project so a contractor working across sites can scan it quickly.
   const byProject = new Map<string, typeof items>()
@@ -114,8 +119,24 @@ export function contractorNewItemsEmail(opts: {
     </table>
   `).join('')
 
+  const text = [
+    `Hi ${contactName || contractorName},`,
+    '',
+    `You have ${n} new item${n !== 1 ? 's' : ''} assigned to you. Full details, site access contacts and photos are on your portal:`,
+    portalUrl,
+    ...Array.from(byProject.entries()).flatMap(([project, list]) => [
+      '',
+      project,
+      ...list.map(i => `  ${i.itemNumber}  ${i.title}${i.unitIdentifier ? `  (${i.unitIdentifier}${i.address ? `, ${i.address}` : ''})` : ''}`),
+    ]),
+    '',
+    'Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.',
+    ...(hasSignOff ? ['', 'Thanks,', ...(senderName ? [senderName] : []), ...(senderEmail ? [senderEmail] : [])] : []),
+  ].join('\n')
+
   return {
-    subject: `${n} new maintenance item${n !== 1 ? 's' : ''} for ${contractorName}`,
+    subject: `Stratum Maintenance Hub: ${n} new maintenance item${n !== 1 ? 's' : ''} for ${contractorName}`,
+    text,
     html: `
       <div style="font-family: -apple-system, sans-serif; max-width: 640px; color: #37352f;">
         <h2 style="margin-bottom: 4px;">New Maintenance Items</h2>
@@ -125,6 +146,12 @@ export function contractorNewItemsEmail(opts: {
         <p>You have <strong>${n} new item${n !== 1 ? 's' : ''}</strong> assigned to you. Full details, site access contacts and photos are on your portal.</p>
         <a href="${esc(portalUrl)}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 4px;">Open your jobs</a>
         ${sections}
+        ${hasSignOff ? `
+        <p style="margin: 24px 0 0;">Thanks,<br>
+          ${senderName ? `<strong>${esc(senderName)}</strong><br>` : ''}
+          ${senderEmail ? `<a href="mailto:${esc(senderEmail)}" style="color: #2383e2;">${esc(senderEmail)}</a>` : ''}
+        </p>
+        ` : ''}
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 24px 0;" />
         <p style="color: #787774; font-size: 13px;">Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.<br>
           <a href="${esc(portalUrl)}" style="color: #2383e2;">${esc(portalUrl)}</a>

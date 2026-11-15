@@ -66,7 +66,9 @@ export async function POST(
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-    const { subject, html } = contractorNewItemsEmail({
+    const { data: me } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+    const { subject, html, text } = contractorNewItemsEmail({
+      sender: { name: me?.full_name ?? null, email: user.email ?? null },
       contractorName: contractor.company_name,
       contactName: contractor.contact_name,
       portalUrl: `${appUrl}/portal/${contractor.portal_token}`,
@@ -80,8 +82,20 @@ export async function POST(
     })
 
     const resend = new Resend(process.env.RESEND_API_KEY)
-    const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'Maintenance Hub <noreply@maintenancehub.co.nz>'
-    const { error: emailError } = await resend.emails.send({ from: fromEmail, to: contractor.email, subject, html })
+    // Always show "Stratum Maintenance Hub" as the sender name; the address still comes from RESEND_FROM_EMAIL.
+    const configuredFrom = process.env.RESEND_FROM_EMAIL ?? 'noreply@maintenancehub.co.nz'
+    const fromAddress = configuredFrom.match(/<([^>]+)>/)?.[1] ?? configuredFrom.trim()
+    const fromEmail = `Stratum Maintenance Hub <${fromAddress}>`
+    // Replies go to whoever clicked Notify; RESEND_REPLY_TO is a fallback for users without an email.
+    const replyTo = user.email ?? process.env.RESEND_REPLY_TO
+    const { error: emailError } = await resend.emails.send({
+      from: fromEmail,
+      to: contractor.email,
+      ...(replyTo ? { replyTo } : {}),
+      subject,
+      html,
+      text,
+    })
     if (emailError) return Response.json({ error: emailError.message }, { status: 500 })
   }
 
