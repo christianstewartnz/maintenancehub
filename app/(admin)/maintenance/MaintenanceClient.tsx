@@ -250,7 +250,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     style={checkboxStyle}
                   />
                 </th>
-                <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th>
+                <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Address</th>
                 <th>Trade</th><th>Contractor</th><th>Status</th>
                 <th>Age</th>
               </tr>
@@ -282,6 +282,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     </td>
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.project?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{unit?.unit_identifier ?? '—'}</td>
+                    <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.address ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.trade as any)?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.contractor as any)?.company_name ?? '—'}</td>
                     <td><StatusBadge status={item.status} /></td>
