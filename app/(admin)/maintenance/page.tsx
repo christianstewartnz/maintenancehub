@@ -11,7 +11,7 @@ export default async function MaintenancePage() {
     supabase
       .from('maintenance_items')
       .select(`
-        id, item_number, title, status, created_at, updated_at, assigned_to,
+        id, item_number, title, status, created_at, updated_at, assigned_to, contractor_id,
         unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
         trade:trades(id, name),
         contractor:contractors(id, company_name),
