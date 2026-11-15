@@ -2,13 +2,14 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import SettingsClient from './SettingsClient'
+import ProfileNameCard from './ProfileNameCard'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [{ data: prefs }, { data: projects }] = await Promise.all([
+  const [{ data: prefs }, { data: projects }, { data: profile }] = await Promise.all([
     supabase
       .from('notification_preferences')
       .select('*')
@@ -19,6 +20,7 @@ export default async function SettingsPage() {
       .select('id, name, address, description, status, development_company, created_at, updated_at')
       .eq('status', 'active')
       .order('name'),
+    supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle(),
   ])
 
   return (
@@ -29,6 +31,7 @@ export default async function SettingsPage() {
         description="Configure notifications, reports, and SLA thresholds"
       />
       <div style={{ padding: '24px 32px' }}>
+        <ProfileNameCard userId={user.id} email={user.email ?? null} fullName={profile?.full_name ?? null} />
         <SettingsClient
           prefs={prefs}
           userId={user.id}

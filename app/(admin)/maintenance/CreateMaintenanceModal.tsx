@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, Sparkles, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { MaintenanceItem } from '@/lib/types'
+import type { MaintenanceItem, Profile } from '@/lib/types'
+import { profileName } from '@/lib/assignees'
 
 interface LineItem {
   trade_id: string
@@ -15,14 +16,17 @@ const emptyLine = (): LineItem => ({ trade_id: '', title: '', description: '' })
 
 interface Props {
   projects: { id: string; name: string }[]
+  users: Profile[]
+  currentUserId: string
   onClose: () => void
   onCreated: (item: MaintenanceItem) => void
 }
 
-export default function CreateMaintenanceModal({ projects, onClose, onCreated }: Props) {
+export default function CreateMaintenanceModal({ projects, users, currentUserId, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')
   const [projectId, setProjectId] = useState('')
   const [unitId, setUnitId] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
   const [units, setUnits] = useState<{ id: string; unit_identifier: string | null; address: string | null }[]>([])
   const [trades, setTrades] = useState<{ id: string; name: string }[]>([])
   const [lines, setLines] = useState<LineItem[]>([emptyLine()])
@@ -93,9 +97,10 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
           trade_id: tid || null,
           title: r.title,
           description: r.description || null,
+          assigned_to: assignedTo || null,
         })
         .select(`
-          id, item_number, title, status, created_at, updated_at,
+          id, item_number, title, status, created_at, updated_at, assigned_to,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -131,9 +136,10 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
           trade_id: line.trade_id || null,
           title: line.title.trim(),
           description: line.description.trim() || null,
+          assigned_to: assignedTo || null,
         })
         .select(`
-          id, item_number, title, status, created_at, updated_at,
+          id, item_number, title, status, created_at, updated_at, assigned_to,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -189,17 +195,29 @@ export default function CreateMaintenanceModal({ projects, onClose, onCreated }:
 
             {/* ── Project selector (always visible) ── */}
             <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '16px 18px', marginBottom: 20 }}>
-              <p style={{ margin: '0 0 14px', fontSize: 13, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project</p>
-              <select
-                className="input"
-                required
-                value={projectId}
-                onChange={e => setProjectId(e.target.value)}
-                style={{ maxWidth: 320 }}
-              >
-                <option value="">Select a project…</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 240px', maxWidth: 320 }}>
+                  <label style={sectionLabel}>Project</label>
+                  <select
+                    className="input"
+                    required
+                    value={projectId}
+                    onChange={e => setProjectId(e.target.value)}
+                  >
+                    <option value="">Select a project…</option>
+                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: '1 1 200px', maxWidth: 260 }}>
+                  <label style={sectionLabel}>Assign to</label>
+                  <select className="input" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
+                    <option value="">Unassigned (everyone)</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             {mode === 'manual' ? (
@@ -368,4 +386,14 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 500,
   marginBottom: 5,
   color: '#37352f',
+}
+
+const sectionLabel: React.CSSProperties = {
+  display: 'block',
+  margin: '0 0 8px',
+  fontSize: 13,
+  fontWeight: 600,
+  color: '#787774',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
 }

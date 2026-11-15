@@ -98,10 +98,18 @@ export interface MaintenanceItem {
   updated_at: string
   completed_at: string | null
   scheduled_date: string | null
+  assigned_to: string | null
   unit?: Unit & { project?: Project }
   trade?: Trade
   contractor?: Contractor
   work_order?: WorkOrder
+}
+
+/** A Maintenance Hub staff user (mirrors auth.users). */
+export interface Profile {
+  id: string
+  email: string | null
+  full_name: string | null
 }
 
 export interface MaintenanceItemAttachment {

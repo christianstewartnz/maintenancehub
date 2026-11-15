@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { buildMaintenanceWorkbook, type ExportItem } from '@/lib/export-maintenance'
 import type { MaintenanceStatus } from '@/lib/types'
+import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, profileName } from '@/lib/assignees'
 
 const STATUSES: MaintenanceStatus[] = ['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete']
 
-// GET /api/maintenance/export?project=&unit=&status=&contractor=&q=
+// GET /api/maintenance/export?project=&unit=&status=&contractor=&assignee=&q=
+//   assignee: 'me' (mine + unassigned) | 'unassigned' | <user id> (only that user's)
 // Mirrors the filters on the Maintenance page and returns an .xlsx workbook:
 //   - unit filter set   → single sheet for that unit
 //   - otherwise         → Summary tab + one tab per unit
@@ -19,11 +21,13 @@ export async function GET(request: Request) {
   const status = params.get('status') || ''
   const contractorId = params.get('contractor') || ''
   const search = (params.get('q') || '').trim().toLowerCase()
+  const assignee = params.get('assignee') || ''
 
   let query = supabase
     .from('maintenance_items')
     .select(`
       id, item_number, title, description, status, created_at,
+      assignee:profiles(full_name, email),
       unit:units(id, unit_identifier, lot_number, address, settlement_date,
         owners:unit_owners(name, email, phone),
         project:projects(id, name)),
@@ -51,6 +55,21 @@ export async function GET(request: Request) {
   else query = query.neq('status', 'complete')
   if (contractorId) query = query.eq('contractor_id', contractorId)
 
+  let assigneeLabel: string | null = null
+  if (assignee === ASSIGNEE_ME) {
+    query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`)
+    const { data: me } = await supabase.from('profiles').select('full_name, email').eq('id', user.id).single()
+    assigneeLabel = `${profileName(me ?? { full_name: null, email: user.email ?? null })} + unassigned`
+  } else if (assignee === ASSIGNEE_UNASSIGNED) {
+    query = query.is('assigned_to', null)
+    assigneeLabel = 'Unassigned'
+  } else if (assignee) {
+    const { data: who } = await supabase.from('profiles').select('full_name, email').eq('id', assignee).maybeSingle()
+    if (!who) return Response.json({ error: 'Unknown assignee' }, { status: 400 })
+    query = query.eq('assigned_to', assignee)
+    assigneeLabel = profileName(who)
+  }
+
   const { data, error } = await query
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
@@ -70,6 +89,7 @@ export async function GET(request: Request) {
   const { buffer, filename } = await buildMaintenanceWorkbook(items, {
     projectName: projectName ?? (unitId ? items[0].unit?.project?.name ?? null : null),
     singleUnit: !!unitId,
+    assigneeLabel,
   })
 
   return new Response(buffer as ArrayBuffer, {

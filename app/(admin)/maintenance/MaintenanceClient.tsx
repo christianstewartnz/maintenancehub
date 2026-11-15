@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
@@ -8,15 +8,20 @@ import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getAgeClass, formatDate } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
-import type { MaintenanceItem, MaintenanceStatus } from '@/lib/types'
+import type { MaintenanceItem, MaintenanceStatus, Profile } from '@/lib/types'
+import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
+
+const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
 
 interface Props {
   items: MaintenanceItem[]
   projects: { id: string; name: string }[]
   contractors: { id: string; company_name: string }[]
+  users: Profile[]
+  currentUserId: string
 }
 
-export default function MaintenanceClient({ items: initial, projects, contractors }: Props) {
+export default function MaintenanceClient({ items: initial, projects, contractors, users, currentUserId }: Props) {
   const [items, setItems] = useState(initial)
   const [showCreate, setShowCreate] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -25,11 +30,42 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [filterUnit, setFilterUnit] = useState('')
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | ''>('')
   const [filterContractor, setFilterContractor] = useState('')
+  const [filterAssignee, setFilterAssignee] = useState('')
+  const [assigning, setAssigning] = useState(false)
   const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+
+  // Remember each person's assignee filter on this browser
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ASSIGNEE_FILTER_KEY)
+      if (saved && (saved === ASSIGNEE_ME || saved === ASSIGNEE_UNASSIGNED || users.some(u => u.id === saved))) setFilterAssignee(saved)
+    } catch {}
+  }, [users])
+
+  function changeAssigneeFilter(value: string) {
+    setFilterAssignee(value)
+    try { value ? localStorage.setItem(ASSIGNEE_FILTER_KEY, value) : localStorage.removeItem(ASSIGNEE_FILTER_KEY) } catch {}
+  }
+
+  const userById = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
+  const userLabel = (u: Profile) => `${profileName(u)}${u.id === currentUserId ? ' (me)' : ''}`
+
+  async function assignItems(ids: string[], assignedTo: string | null) {
+    if (!ids.length) return
+    setAssigning(true)
+    const { error } = await supabase.from('maintenance_items').update({ assigned_to: assignedTo }).in('id', ids)
+    if (error) {
+      alert(`Couldn't update assignment: ${error.message}`)
+    } else {
+      const set = new Set(ids)
+      setItems(prev => prev.map(i => set.has(i.id) ? { ...i, assigned_to: assignedTo } : i))
+    }
+    setAssigning(false)
+  }
 
   function toggleSelected(id: string) {
     setSelected(prev => {
@@ -83,6 +119,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       ? result.filter(i => i.status === filterStatus)
       : result.filter(i => i.status !== 'complete')
     if (filterContractor) result = result.filter(i => i.contractor_id === filterContractor)
+    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
 
     const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
 
@@ -90,7 +127,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     else result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return result
-  }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, sortBy])
+  }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, filterAssignee, currentUserId, sortBy])
 
   // Only act on selected items that are still visible and not already complete
   const selectable = filtered.filter(i => i.status !== 'complete')
@@ -101,10 +138,10 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
   }
 
-  const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterContractor)
+  const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterContractor || filterAssignee)
 
   function clearFilters() {
-    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterStatus(''); setFilterContractor('')
+    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterStatus(''); setFilterContractor(''); changeAssigneeFilter('')
   }
 
   async function handleExport() {
@@ -116,6 +153,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       if (filterUnit) params.set('unit', filterUnit)
       if (filterStatus) params.set('status', filterStatus)
       if (filterContractor) params.set('contractor', filterContractor)
+      if (filterAssignee) params.set('assignee', filterAssignee)
       const res = await fetch(`/api/maintenance/export?${params}`)
       if (!res.ok) {
         const body = await res.json().catch(() => null)
@@ -150,6 +188,18 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#b0aea8' }} />
           <input className="input" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />
         </div>
+        <select
+          className="input"
+          style={{ flex: '0 0 auto', width: 'auto', ...(filterAssignee ? { borderColor: '#2383e2', color: '#2383e2' } : {}) }}
+          value={filterAssignee}
+          onChange={e => changeAssigneeFilter(e.target.value)}
+          aria-label="Filter by assignee"
+        >
+          <option value="">Everyone's items</option>
+          <option value={ASSIGNEE_ME}>My items + unassigned</option>
+          {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
+          <option value={ASSIGNEE_UNASSIGNED}>Only unassigned</option>
+        </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }}>
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -207,9 +257,23 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} onClick={() => setSelected(new Set())}>
             Clear
           </button>
+          <select
+            className="input"
+            style={{ marginLeft: 'auto', width: 'auto', fontSize: 13 }}
+            value=""
+            disabled={assigning}
+            aria-label="Assign selected items"
+            onChange={e => {
+              const v = e.target.value
+              if (v) assignItems(selectedVisible, v === ASSIGNEE_UNASSIGNED ? null : v)
+            }}
+          >
+            <option value="">{assigning ? 'Assigning…' : `Assign ${selectedVisible.length} to…`}</option>
+            {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
+            <option value={ASSIGNEE_UNASSIGNED}>Unassigned (everyone)</option>
+          </select>
           <button
             className="btn btn-primary"
-            style={{ marginLeft: 'auto' }}
             onClick={() => markSelectedComplete(selectedVisible)}
             disabled={completing}
           >
@@ -251,7 +315,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                   />
                 </th>
                 <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Address</th>
-                <th>Trade</th><th>Contractor</th><th>Status</th>
+                <th>Trade</th><th>Contractor</th><th>Assigned to</th><th>Status</th>
                 <th>Age</th>
               </tr>
             </thead>
@@ -285,6 +349,20 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.address ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.trade as any)?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.contractor as any)?.company_name ?? '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <select
+                        className="assignee-select"
+                        value={item.assigned_to ?? ''}
+                        onChange={e => assignItems([item.id], e.target.value || null)}
+                        disabled={assigning}
+                        aria-label={`Assign ${item.item_number}`}
+                        style={{ color: item.assigned_to ? '#37352f' : '#b0aea8', fontWeight: item.assigned_to === currentUserId ? 500 : undefined }}
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
+                        {item.assigned_to && !userById.has(item.assigned_to) && <option value={item.assigned_to}>Unknown user</option>}
+                      </select>
+                    </td>
                     <td><StatusBadge status={item.status} /></td>
                     <td style={{ fontSize: 13, color: isComplete ? '#1d6a38' : days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
                       {days}d
@@ -300,6 +378,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       {showCreate && (
         <CreateMaintenanceModal
           projects={projects}
+          users={users}
+          currentUserId={currentUserId}
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
         />

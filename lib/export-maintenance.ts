@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import type { MaintenanceStatus } from './types'
+import { profileName } from './assignees'
 
 // ─── Input shape (what the export route selects from Supabase) ─────────────
 
@@ -29,6 +30,7 @@ export interface ExportItem {
   unit: ExportUnit | null
   trade: { name: string } | null
   contractor: { company_name: string; contact_name: string | null } | null
+  assignee: { full_name: string | null; email: string | null } | null
 }
 
 // ─── Styling (matches the hand-built "Open Maintenance" workbook) ──────────
@@ -155,6 +157,7 @@ const ITEM_COLUMNS: { header: string; width: number }[] = [
   { header: 'Trade', width: 16 },
   { header: 'Contractor', width: 26 },
   { header: 'Status', width: 13 },
+  { header: 'Assigned to', width: 16 },
   { header: 'Logged', width: 12 },
   { header: 'Notes', width: 60 },
   { header: 'Source', width: 40 },
@@ -248,6 +251,7 @@ function buildUnitSheet(wb: ExcelJS.Workbook, group: UnitGroup, opts: { withBack
       item.trade?.name ?? '—',
       contractorLabel(item.contractor),
       STATUS_LABEL[item.status] ?? item.status,
+      item.assignee ? profileName(item.assignee) : 'Unassigned',
       formatNzDate(item.created_at),
       notes,
       source,
@@ -260,7 +264,8 @@ function buildUnitSheet(wb: ExcelJS.Workbook, group: UnitGroup, opts: { withBack
     }
     if (!item.contractor) r.getCell(4).font = { name: FONT, size: 10, italic: true, color: { argb: GREY_TEXT } }
     r.getCell(5).fill = solid(STATUS_FILL[item.status] ?? STRIPE)
-    r.getCell(8).font = { name: FONT, size: 9, color: { argb: GREY_TEXT } }
+    if (!item.assignee) r.getCell(6).font = { name: FONT, size: 10, italic: true, color: { argb: GREY_TEXT } }
+    r.getCell(9).font = { name: FONT, size: 9, color: { argb: GREY_TEXT } }
     row++
   }
   group.lastItemRow = Math.max(row - 1, group.firstItemRow)
@@ -358,6 +363,8 @@ export interface BuildExportOptions {
   projectName?: string | null
   /** When true, produce a single unit sheet with no summary tab. */
   singleUnit?: boolean
+  /** Assignee filter in effect, e.g. "Sam" or "Sam + unassigned" (shown in title + filename). */
+  assigneeLabel?: string | null
   exportedAt?: Date
 }
 
@@ -397,7 +404,7 @@ export async function buildMaintenanceWorkbook(items: ExportItem[], options: Bui
   wb.creator = 'Maintenance Hub'
   wb.created = exportedAt
 
-  const heading = `${openOnly ? 'Open ' : ''}Maintenance`
+  const heading = `${openOnly ? 'Open ' : ''}Maintenance${options.assigneeLabel ? ` (${options.assigneeLabel})` : ''}`
 
   if (options.singleUnit && groups.length === 1) {
     buildUnitSheet(wb, groups[0], { withBackLink: false, openOnly })

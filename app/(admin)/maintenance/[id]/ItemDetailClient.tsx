@@ -5,7 +5,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade } from '@/lib/types'
+import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile } from '@/lib/types'
+import { profileName } from '@/lib/assignees'
 import { Pencil, Mail, CheckCircle2, RotateCcw } from 'lucide-react'
 
 interface Props {
@@ -16,9 +17,11 @@ interface Props {
   attachments: MaintenanceItemAttachment[]
   contractors: { id: string; company_name: string }[]
   trades: Trade[]
+  users: Profile[]
+  currentUserId: string
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, contractors, trades }: Props) {
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, contractors, trades, users, currentUserId }: Props) {
   const [item, setItem] = useState(initial)
   const [activity, setActivity] = useState(initialActivity)
   const [comments, setComments] = useState(initialComments)
@@ -31,6 +34,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const [saving, setSaving] = useState(false)
   const [scheduledDate, setScheduledDate] = useState(item.scheduled_date ?? '')
   const [savingDate, setSavingDate] = useState(false)
+  const [savingAssignee, setSavingAssignee] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -82,6 +86,26 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       .select()
       .single()
     if (data) { setComments(prev => [...prev, data]); setComment('') }
+  }
+
+  async function saveAssignee(assignedTo: string | null) {
+    setSavingAssignee(true)
+    const { error } = await supabase.from('maintenance_items').update({ assigned_to: assignedTo }).eq('id', item.id)
+    if (error) {
+      alert(`Couldn't update assignment: ${error.message}`)
+    } else {
+      const user = users.find(u => u.id === assignedTo)
+      setItem(prev => ({ ...prev, assigned_to: assignedTo }))
+      setActivity(prev => [{
+        id: Math.random().toString(),
+        maintenance_item_id: item.id,
+        action: 'assignee_changed',
+        details: { from: item.assigned_to, to: assignedTo, to_name: user ? profileName(user) : null },
+        performed_by: 'admin',
+        created_at: new Date().toISOString(),
+      }, ...prev])
+    }
+    setSavingAssignee(false)
   }
 
   async function saveScheduledDate(date: string) {
@@ -243,6 +267,28 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
 
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <InfoCard title="Assigned to">
+          <select
+            className="input"
+            value={item.assigned_to ?? ''}
+            onChange={e => saveAssignee(e.target.value || null)}
+            disabled={savingAssignee}
+          >
+            <option value="">Unassigned (everyone)</option>
+            {users.map(u => <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>)}
+          </select>
+          {item.assigned_to !== currentUserId && (
+            <button
+              className="btn btn-ghost"
+              style={{ marginTop: 6, fontSize: 12, color: '#2383e2', padding: '2px 0' }}
+              onClick={() => saveAssignee(currentUserId)}
+              disabled={savingAssignee || !currentUserId}
+            >
+              Assign to me
+            </button>
+          )}
+        </InfoCard>
+
         <InfoCard title="Location">
           <Row label="Project" value={unit?.project?.name} href={`/projects/${unit?.project?.id}`} />
           <Row label="Construction No." value={unit?.unit_identifier} />
@@ -415,6 +461,7 @@ function formatActivityLog(log: ActivityLog): string {
     case 'status_changed': return `changed status from ${STATUS_LABELS[d?.from as MaintenanceStatus] ?? d?.from} to ${STATUS_LABELS[d?.to as MaintenanceStatus] ?? d?.to}`
     case 'contractor_assigned': return 'assigned contractor'
     case 'work_order_added': return 'added to work order'
+    case 'assignee_changed': return d?.to ? `assigned item to ${d?.to_name ?? 'a user'}` : 'unassigned item'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'
     case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
