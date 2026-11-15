@@ -1,12 +1,11 @@
 interface PageHeaderProps {
   title: string
   description?: string
-  emoji?: string
   actions?: React.ReactNode
   breadcrumbs?: { label: string; href?: string }[]
 }
 
-export default function PageHeader({ title, description, emoji, actions, breadcrumbs }: PageHeaderProps) {
+export default function PageHeader({ title, description, actions, breadcrumbs }: PageHeaderProps) {
   return (
     <div className="page-header" style={{ borderBottom: '1px solid #e9e9e7', marginBottom: 0 }}>
       {breadcrumbs && breadcrumbs.length > 0 && (
@@ -28,7 +27,6 @@ export default function PageHeader({ title, description, emoji, actions, breadcr
       <div className="page-header-row">
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: '#37352f', margin: 0 }}>
-            {emoji && <span style={{ marginRight: 8 }}>{emoji}</span>}
             {title}
           </h1>
           {description && (

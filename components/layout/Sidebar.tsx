@@ -19,6 +19,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { NOT_PENDING_FILTER, COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
+import StratumLogo from '@/components/ui/StratumLogo'
 
 const NAV_ITEMS = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
@@ -111,8 +112,9 @@ export default function Sidebar() {
           minHeight: 52,
         }}>
           {!collapsed && (
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#37352f' }}>
-              🏗️ Maintenance Hub
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: '#37352f' }}>
+              <StratumLogo size={20} />
+              Maintenance Hub
             </span>
           )}
           <button

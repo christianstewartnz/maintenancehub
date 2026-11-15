@@ -28,7 +28,6 @@ export default async function MaintenancePage() {
   return (
     <div>
       <PageHeader
-        emoji="🔧"
         title="Maintenance Items"
         description="Log and track all maintenance jobs"
       />

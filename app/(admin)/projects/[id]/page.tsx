@@ -23,7 +23,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   return (
     <div>
       <PageHeader
-        emoji="🏗️"
         title={projectRes.data.name}
         description={projectRes.data.address ?? undefined}
         breadcrumbs={[{ label: 'Projects', href: '/projects' }, { label: projectRes.data.name }]}

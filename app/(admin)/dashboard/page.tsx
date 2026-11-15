@@ -31,7 +31,6 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        emoji="📊"
         title="Dashboard"
         description="Open maintenance items across all active projects"
       />

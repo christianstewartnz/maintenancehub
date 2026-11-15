@@ -8,6 +8,7 @@ import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, M
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
 import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
+import StratumLogo from '@/components/ui/StratumLogo'
 
 interface Props {
   contractor: { id: string; company_name: string; contact_name: string | null }
@@ -336,7 +337,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     <div style={{ minHeight: '100vh', background: '#f7f7f5' }}>
       {/* Header */}
       <div style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '14px 24px' }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#37352f' }}>🏗️ {contractor.company_name}</h1>
+        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#37352f', display: 'flex', alignItems: 'center', gap: 8 }}><StratumLogo size={22} />{contractor.company_name}</h1>
         <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>Maintenance Portal</p>
       </div>
 

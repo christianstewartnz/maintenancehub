@@ -42,7 +42,6 @@ export default async function SignOffPage() {
   return (
     <div>
       <PageHeader
-        emoji="✅"
         title="Sign-off Queue"
         description="Contractor-complete items awaiting your confirmation"
       />

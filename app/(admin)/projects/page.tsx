@@ -18,7 +18,6 @@ export default async function ProjectsPage() {
   return (
     <div>
       <PageHeader
-        emoji="📁"
         title="Projects"
         description="Manage your property development projects"
       />

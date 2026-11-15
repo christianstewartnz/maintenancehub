@@ -14,7 +14,7 @@ export default async function NewWorkOrderPage() {
 
   return (
     <div>
-      <PageHeader emoji="📋" title="New Work Order" description="Select items to group and send to a contractor" />
+      <PageHeader title="New Work Order" description="Select items to group and send to a contractor" />
       <NewWorkOrderClient
         projects={projects ?? []}
         contractors={contractors ?? []}

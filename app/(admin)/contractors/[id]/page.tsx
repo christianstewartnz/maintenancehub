@@ -37,7 +37,6 @@ export default async function ContractorDetailPage({ params }: { params: Promise
   return (
     <div>
       <PageHeader
-        emoji="👷"
         title={contractorRes.data.company_name}
         description={contractorRes.data.contact_name ?? undefined}
         breadcrumbs={[{ label: 'Contractors', href: '/contractors' }, { label: contractorRes.data.company_name }]}

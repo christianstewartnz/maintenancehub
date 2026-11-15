@@ -49,7 +49,7 @@ export default function LoginPage() {
       }}>
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 22, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>
-            🏗️ Maintenance Hub
+            Maintenance Hub
           </h1>
           <p style={{ color: '#787774', fontSize: 14 }}>Sign in to your account</p>
         </div>

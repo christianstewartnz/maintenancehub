@@ -26,7 +26,6 @@ export default async function SettingsPage() {
   return (
     <div>
       <PageHeader
-        emoji="⚙️"
         title="Settings"
         description="Configure notifications, reports, and SLA thresholds"
       />

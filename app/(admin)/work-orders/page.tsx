@@ -17,7 +17,6 @@ export default async function WorkOrdersPage() {
   return (
     <div>
       <PageHeader
-        emoji="📋"
         title="Work Orders"
         description="Formal work orders sent to contractors"
         actions={

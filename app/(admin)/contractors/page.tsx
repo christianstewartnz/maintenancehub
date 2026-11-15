@@ -20,7 +20,7 @@ export default async function ContractorsPage() {
 
   return (
     <div>
-      <PageHeader emoji="👷" title="Contractors" description="Manage your contractor relationships" />
+      <PageHeader title="Contractors" description="Manage your contractor relationships" />
       <ContractorsClient contractors={contractors ?? []} pendingItems={(pending ?? []) as unknown as PendingRow[]} />
     </div>
   )
