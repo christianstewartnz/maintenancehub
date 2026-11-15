@@ -32,6 +32,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [filterContractor, setFilterContractor] = useState('')
   const [filterAssignee, setFilterAssignee] = useState('')
   const [assigning, setAssigning] = useState(false)
+  const [bulkAssignee, setBulkAssignee] = useState('')
   const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState(false)
@@ -262,23 +263,39 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} onClick={() => setSelected(new Set())}>
             Clear
           </button>
+          {/* Picking a person only stages the choice; the Assign button applies it */}
           <select
             className="input"
             style={{ marginLeft: 'auto', width: 'auto', fontSize: 13 }}
-            value=""
+            value={bulkAssignee}
             disabled={assigning}
             aria-label="Assign selected items"
-            onChange={e => {
-              const v = e.target.value
-              if (v) assignItems(selectedVisible, v === ASSIGNEE_UNASSIGNED ? null : v)
-            }}
+            onChange={e => setBulkAssignee(e.target.value)}
           >
-            <option value="">{assigning ? 'Assigning…' : `Assign ${selectedVisible.length} to…`}</option>
+            <option value="">{`Assign ${selectedVisible.length} to…`}</option>
             {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
             <option value={ASSIGNEE_UNASSIGNED}>Unassigned (everyone)</option>
           </select>
+          {bulkAssignee && (
+            <>
+              <button
+                className="btn btn-primary"
+                disabled={assigning}
+                onClick={async () => {
+                  await assignItems(selectedVisible, bulkAssignee === ASSIGNEE_UNASSIGNED ? null : bulkAssignee)
+                  setBulkAssignee('')
+                }}
+              >
+                {assigning ? 'Assigning…' : `Assign ${selectedVisible.length}`}
+              </button>
+              <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} disabled={assigning} onClick={() => setBulkAssignee('')}>
+                Cancel
+              </button>
+            </>
+          )}
+          <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: '#d3e5f8', margin: '0 4px' }} />
           <button
-            className="btn btn-primary"
+            className="btn btn-secondary"
             onClick={() => markSelectedComplete(selectedVisible)}
             disabled={completing}
           >
