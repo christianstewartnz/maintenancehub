@@ -9,6 +9,7 @@ import {
   Wrench,
   Users,
   ClipboardList,
+  Settings,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: '/contractors',  label: 'Contractors',  icon: Users },
   { href: '/work-orders',  label: 'Work Orders',  icon: ClipboardList },
   { href: '/sign-off',     label: 'Sign-off',     icon: CheckCheck },
+  { href: '/settings',     label: 'Settings',     icon: Settings },
 ]
 
 export default function Sidebar() {
