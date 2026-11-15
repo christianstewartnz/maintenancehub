@@ -38,17 +38,22 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const supabase = createClient()
   const router = useRouter()
 
-  // Remember each person's assignee filter on this browser
+  // Remember each person's assignee filter on this browser.
+  // Read after mount (not in useState's initialiser) so server and client render the same HTML.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(ASSIGNEE_FILTER_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage after hydration
       if (saved && (saved === ASSIGNEE_ME || saved === ASSIGNEE_UNASSIGNED || users.some(u => u.id === saved))) setFilterAssignee(saved)
     } catch {}
   }, [users])
 
   function changeAssigneeFilter(value: string) {
     setFilterAssignee(value)
-    try { value ? localStorage.setItem(ASSIGNEE_FILTER_KEY, value) : localStorage.removeItem(ASSIGNEE_FILTER_KEY) } catch {}
+    try {
+      if (value) localStorage.setItem(ASSIGNEE_FILTER_KEY, value)
+      else localStorage.removeItem(ASSIGNEE_FILTER_KEY)
+    } catch {}
   }
 
   const userById = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
@@ -195,7 +200,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           onChange={e => changeAssigneeFilter(e.target.value)}
           aria-label="Filter by assignee"
         >
-          <option value="">Everyone's items</option>
+          <option value="">Everyone&apos;s items</option>
           <option value={ASSIGNEE_ME}>My items + unassigned</option>
           {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
           <option value={ASSIGNEE_UNASSIGNED}>Only unassigned</option>
