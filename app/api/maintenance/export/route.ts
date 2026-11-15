@@ -46,7 +46,9 @@ export async function GET(request: Request) {
     if (!ids.length) query = query.eq('unit_id', '00000000-0000-0000-0000-000000000000')
     else query = query.in('unit_id', ids)
   }
+  // Matches the page: no status filter means all open (non-complete) items
   if (status && STATUSES.includes(status as MaintenanceStatus)) query = query.eq('status', status)
+  else query = query.neq('status', 'complete')
   if (contractorId) query = query.eq('contractor_id', contractorId)
 
   const { data, error } = await query

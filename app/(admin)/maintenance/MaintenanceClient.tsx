@@ -78,7 +78,10 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     }
     if (filterProject) result = result.filter(i => (i.unit as any)?.project?.id === filterProject)
     if (filterUnit) result = result.filter(i => (i.unit as any)?.id === filterUnit)
-    if (filterStatus) result = result.filter(i => i.status === filterStatus)
+    // No status chosen = all open items; completed items only show when "Complete" is picked
+    result = filterStatus
+      ? result.filter(i => i.status === filterStatus)
+      : result.filter(i => i.status !== 'complete')
     if (filterContractor) result = result.filter(i => i.contractor_id === filterContractor)
 
     const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
@@ -158,7 +161,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           </select>
         )}
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
-          <option value="">All Status</option>
+          <option value="">All Open</option>
           {(['logged','assigned','in_progress','contractor_complete','complete'] as MaintenanceStatus[]).map(s => (
             <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
           ))}
