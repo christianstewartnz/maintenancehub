@@ -2,21 +2,29 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X } from 'lucide-react'
+import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X, Mail } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Contractor } from '@/lib/types'
+import NotifyContractorModal, { type PendingNotifyItem } from '@/components/ui/NotifyContractorModal'
 
 interface Props {
   contractor: Contractor
   assignments: any[]
   items: any[]
+  pendingItems: PendingNotifyItem[]
+  lastNotifiedAt: string | null
 }
 
-export default function ContractorDetailClient({ contractor: initial, assignments, items }: Props) {
+export default function ContractorDetailClient({ contractor: initial, assignments, items, pendingItems: initialPending, lastNotifiedAt: initialLast }: Props) {
   const [contractor, setContractor] = useState(initial)
+  const [pending, setPending] = useState(initialPending)
+  const [lastNotifiedAt, setLastNotifiedAt] = useState(initialLast)
+  const [showNotify, setShowNotify] = useState(false)
+  const [flash, setFlash] = useState('')
+  const pendingIds = new Set(pending.map(p => p.id))
   const [copied, setCopied] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -105,7 +113,12 @@ export default function ContractorDetailClient({ contractor: initial, assignment
               {openItems.map((item: any) => (
                 <tr key={item.id}>
                   <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
-                  <td><Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link></td>
+                  <td>
+                    <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link>
+                    {pendingIds.has(item.id) && (
+                      <span title="Not yet emailed to this contractor" style={{ marginLeft: 8, background: '#e7f1fb', color: '#1f6fbf', borderRadius: 10, padding: '1px 7px', fontWeight: 600, fontSize: 11 }}>Not emailed</span>
+                    )}
+                  </td>
                   <td style={{ fontSize: 13, color: '#787774' }}>{item.unit?.project?.name ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>{item.unit?.unit_identifier ?? '—'}</td>
                   <td><StatusBadge status={item.status} /></td>
@@ -139,6 +152,25 @@ export default function ContractorDetailClient({ contractor: initial, assignment
 
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* New-items notification */}
+        <div style={{ border: `1px solid ${pending.length ? '#b9d7f5' : '#e9e9e7'}`, background: pending.length ? '#f4f9fe' : 'white', borderRadius: 8, padding: '14px 16px' }}>
+          <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>New Items</h4>
+          <p style={{ fontSize: 13, color: '#37352f', margin: '0 0 10px' }}>
+            {pending.length
+              ? <><strong>{pending.length}</strong> item{pending.length !== 1 ? 's' : ''} assigned since their last email.</>
+              : 'Contractor is up to date.'}
+          </p>
+          {pending.length > 0 && (
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 13 }} onClick={() => setShowNotify(true)}>
+              <Mail size={14} /> Notify ({pending.length} new)
+            </button>
+          )}
+          {flash && <p style={{ fontSize: 12, color: '#0f7b6c', margin: '8px 0 0' }}>{flash}</p>}
+          <p style={{ fontSize: 12, color: '#9b9a97', margin: '8px 0 0' }}>
+            Last notified: {lastNotifiedAt ? formatDate(lastNotifiedAt) : 'never'}
+          </p>
+        </div>
 
         {/* Contact card — view or edit mode */}
         <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
@@ -231,6 +263,21 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           </button>
         </div>
       </div>
+
+      {showNotify && (
+        <NotifyContractorModal
+          contractor={contractor}
+          items={pending}
+          onClose={() => setShowNotify(false)}
+          onDone={(ids, mode) => {
+            setPending(prev => prev.filter(p => !ids.includes(p.id)))
+            setLastNotifiedAt(new Date().toISOString())
+            setShowNotify(false)
+            setFlash(mode === 'email' ? `Emailed ${contractor.email} about ${ids.length} item${ids.length !== 1 ? 's' : ''}.` : `Marked ${ids.length} item${ids.length !== 1 ? 's' : ''} as told.`)
+            router.refresh()
+          }}
+        />
+      )}
     </div>
   )
 }

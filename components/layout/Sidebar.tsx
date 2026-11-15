@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { NOT_PENDING_FILTER, COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
 
 const NAV_ITEMS = [
   { href: '/dashboard',    label: 'Dashboard',    icon: LayoutDashboard },
@@ -35,23 +36,43 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [signOffCount, setSignOffCount] = useState(0)
+  const [notifyCount, setNotifyCount] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
     async function fetchCount() {
-      const { count } = await supabase
-        .from('maintenance_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'contractor_complete')
+      const [{ count }, { count: toNotify }] = await Promise.all([
+        supabase
+          .from('maintenance_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'contractor_complete'),
+        supabase
+          .from('maintenance_items')
+          .select('id', { count: 'exact', head: true })
+          .not('contractor_id', 'is', null)
+          .is('contractor_notified_at', null)
+          .not('status', 'in', NOT_PENDING_FILTER),
+      ])
       setSignOffCount(count ?? 0)
+      setNotifyCount(toNotify ?? 0)
     }
     fetchCount()
     const channel = supabase
       .channel('sidebar_signoff_count')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance_items' }, fetchCount)
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    // Realtime isn't guaranteed to fire for every change, so also refresh when the app says counts moved.
+    window.addEventListener(COUNTS_CHANGED_EVENT, fetchCount)
+    return () => {
+      supabase.removeChannel(channel)
+      window.removeEventListener(COUNTS_CHANGED_EVENT, fetchCount)
+    }
   }, [])
+
+  // Refresh on navigation too (e.g. after assigning items, then opening Contractors).
+  useEffect(() => {
+    window.dispatchEvent(new Event(COUNTS_CHANGED_EVENT))
+  }, [pathname])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -108,8 +129,10 @@ export default function Sidebar() {
         <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== '/' && pathname.startsWith(href))
-            const isSignOff = href === '/sign-off'
-            const showBadge = isSignOff && signOffCount > 0
+            const badgeCount = href === '/sign-off' ? signOffCount : href === '/contractors' ? notifyCount : 0
+            const badgeColor = href === '/contractors' ? '#2383e2' : '#e03c3c'
+            const badgeTitle = href === '/contractors' ? `${notifyCount} assigned item${notifyCount !== 1 ? 's' : ''} not yet emailed to contractors` : undefined
+            const showBadge = badgeCount > 0
             return (
               <Link
                 key={href}
@@ -125,27 +148,27 @@ export default function Sidebar() {
                     <span style={{
                       position: 'absolute', top: -4, right: -4,
                       minWidth: 14, height: 14, borderRadius: 7,
-                      background: '#e03c3c', color: 'white',
+                      background: badgeColor, color: 'white',
                       fontSize: 9, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       padding: '0 3px', lineHeight: 1,
                       border: '1.5px solid white',
                     }}>
-                      {signOffCount > 99 ? '99+' : signOffCount}
+                      {badgeCount > 99 ? '99+' : badgeCount}
                     </span>
                   )}
                 </span>
                 {!collapsed && <span>{label}</span>}
                 {showBadge && !collapsed && (
-                  <span style={{
+                  <span title={badgeTitle} style={{
                     marginLeft: 'auto',
                     minWidth: 18, height: 18, borderRadius: 9,
-                    background: '#e03c3c', color: 'white',
+                    background: badgeColor, color: 'white',
                     fontSize: 11, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     padding: '0 5px', lineHeight: 1,
                   }}>
-                    {signOffCount > 99 ? '99+' : signOffCount}
+                    {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )}
               </Link>

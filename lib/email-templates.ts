@@ -74,6 +74,66 @@ export function maintenanceDueEmail(opts: {
   }
 }
 
+function esc(s: string | null | undefined): string {
+  return (s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+export function contractorNewItemsEmail(opts: {
+  contractorName: string
+  contactName: string | null
+  items: { itemNumber: string; title: string; unitIdentifier: string | null; address: string | null; projectName: string | null }[]
+  portalUrl: string
+}): { subject: string; html: string } {
+  const { contractorName, contactName, items, portalUrl } = opts
+  const n = items.length
+
+  // Group by project so a contractor working across sites can scan it quickly.
+  const byProject = new Map<string, typeof items>()
+  for (const i of items) {
+    const key = i.projectName ?? 'Other'
+    if (!byProject.has(key)) byProject.set(key, [])
+    byProject.get(key)!.push(i)
+  }
+
+  const sections = Array.from(byProject.entries()).map(([project, list]) => `
+    <h3 style="margin: 20px 0 8px; font-size: 15px;">${esc(project)}</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      ${list.map(i => `
+        <tr style="border-top: 1px solid #e9e9e7;">
+          <td style="padding: 8px 12px 8px 0; color: #787774; font-size: 13px; white-space: nowrap; vertical-align: top;">${esc(i.itemNumber)}</td>
+          <td style="padding: 8px 12px 8px 0; vertical-align: top;">${esc(i.title)}</td>
+          <td style="padding: 8px 0; color: #787774; font-size: 13px; vertical-align: top;">
+            ${esc(i.unitIdentifier ?? '—')}${i.address ? `<br>${esc(i.address)}` : ''}
+          </td>
+        </tr>
+      `).join('')}
+    </table>
+  `).join('')
+
+  return {
+    subject: `${n} new maintenance item${n !== 1 ? 's' : ''} for ${contractorName}`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 640px; color: #37352f;">
+        <h2 style="margin-bottom: 4px;">New Maintenance Items</h2>
+        <p style="color: #787774; margin-top: 0;">${esc(contractorName)}</p>
+        <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
+        <p>Hi ${esc(contactName || contractorName)},</p>
+        <p>You have <strong>${n} new item${n !== 1 ? 's' : ''}</strong> assigned to you. Full details, site access contacts and photos are on your portal.</p>
+        <a href="${esc(portalUrl)}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 4px;">Open your jobs</a>
+        ${sections}
+        <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 24px 0;" />
+        <p style="color: #787774; font-size: 13px;">Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.<br>
+          <a href="${esc(portalUrl)}" style="color: #2383e2;">${esc(portalUrl)}</a>
+        </p>
+      </div>
+    `,
+  }
+}
+
 export function contractorCompleteEmail(opts: {
   itemTitle: string
   itemNumber: string

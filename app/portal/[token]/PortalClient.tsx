@@ -7,6 +7,7 @@ import type { MaintenanceStatus, PhotoType } from '@/lib/types'
 import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Camera, Calendar } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
+import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
 
 interface Props {
   contractor: { id: string; company_name: string; contact_name: string | null }
@@ -27,6 +28,13 @@ const WO_STATUS_STYLE: Record<string, { background: string; color: string }> = {
   sent:        { background: '#eef4ff', color: '#2f6fcf' },
   in_progress: { background: '#fff8e6', color: '#c97d0a' },
   complete:    { background: '#e8f5e9', color: '#2e7d32' },
+}
+
+/** Not started yet, and either not emailed yet or emailed within the last PORTAL_NEW_DAYS days. */
+function isNewItem(item: { status: string; contractor_notified_at?: string | null }): boolean {
+  if (item.status !== 'assigned' && item.status !== 'logged') return false
+  if (!item.contractor_notified_at) return true
+  return Date.now() - new Date(item.contractor_notified_at).getTime() < PORTAL_NEW_DAYS * 86400000
 }
 
 // ---------- Item accordion ----------
@@ -63,6 +71,11 @@ function ItemRow({
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 3 }}>
             <span style={{ fontSize: 11, color: '#a0a09e' }}>{item.item_number}</span>
+            {isNewItem(item) && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'white', background: '#2383e2', borderRadius: 4, padding: '1px 6px' }}>
+                New
+              </span>
+            )}
             <StatusBadge status={item.status} />
             {item.work_order && (
               <span style={{

@@ -2,17 +2,34 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, Copy, Check, ExternalLink, Pencil } from 'lucide-react'
+import { Plus, Copy, Check, ExternalLink, Pencil, Mail } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Contractor } from '@/lib/types'
+import NotifyContractorModal, { type PendingNotifyItem } from '@/components/ui/NotifyContractorModal'
+import { COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
 
-interface Props { contractors: Contractor[] }
+export type PendingRow = PendingNotifyItem & { contractor_id: string }
+
+interface Props { contractors: Contractor[]; pendingItems: PendingRow[] }
 
 const emptyForm = { company_name: '', contact_name: '', email: '', phone: '', notes: '' }
 
-export default function ContractorsClient({ contractors: initial }: Props) {
+export default function ContractorsClient({ contractors: initial, pendingItems: initialPending }: Props) {
   const [contractors, setContractors] = useState(initial)
+  const [pending, setPending] = useState(initialPending)
+  const [notifying, setNotifying] = useState<Contractor | null>(null)
+  const [showNotifyAll, setShowNotifyAll] = useState(false)
+
+  const pendingFor = (id: string) => pending.filter(p => p.contractor_id === id)
+  const pendingCounts: Record<string, number> = {}
+  for (const p of pending) pendingCounts[p.contractor_id] = (pendingCounts[p.contractor_id] ?? 0) + 1
+
+  function clearPending(ids: string[]) {
+    const set = new Set(ids)
+    setPending(prev => prev.filter(p => !set.has(p.id)))
+    router.refresh()
+  }
   const [showModal, setShowModal] = useState(false)
   const [editingContractor, setEditingContractor] = useState<Contractor | null>(null)
   const [showArchived, setShowArchived] = useState(false)
@@ -80,7 +97,12 @@ export default function ContractorsClient({ contractors: initial }: Props) {
 
   return (
     <div style={{ padding: '24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        {pending.length > 0 && (
+          <button className="btn btn-secondary" onClick={() => setShowNotifyAll(true)}>
+            <Mail size={15} /> Notify all ({Object.keys(pendingCounts).length})
+          </button>
+        )}
         <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={16} /> New Contractor</button>
       </div>
 
@@ -97,6 +119,8 @@ export default function ContractorsClient({ contractors: initial }: Props) {
             copiedId={copiedId}
             onCopy={copyPortalLink}
             onEdit={openEdit}
+            pendingCounts={pendingCounts}
+            onNotify={setNotifying}
           />
           {contractors.some(c => c.is_active === false) && (
             <div style={{ marginTop: 24 }}>
@@ -116,6 +140,8 @@ export default function ContractorsClient({ contractors: initial }: Props) {
                     copiedId={copiedId}
                     onCopy={copyPortalLink}
                     onEdit={openEdit}
+                    pendingCounts={pendingCounts}
+                    onNotify={setNotifying}
                     dimmed
                   />
                 </div>
@@ -123,6 +149,24 @@ export default function ContractorsClient({ contractors: initial }: Props) {
             </div>
           )}
         </>
+      )}
+
+      {notifying && (
+        <NotifyContractorModal
+          contractor={notifying}
+          items={pendingFor(notifying.id)}
+          onClose={() => setNotifying(null)}
+          onDone={ids => { clearPending(ids); setNotifying(null) }}
+        />
+      )}
+
+      {showNotifyAll && (
+        <NotifyAllModal
+          contractors={contractors.filter(c => pendingCounts[c.id])}
+          pendingFor={pendingFor}
+          onClose={() => setShowNotifyAll(false)}
+          onSent={clearPending}
+        />
       )}
 
       {/* Create modal */}
@@ -187,17 +231,109 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function ContractorTable({ contractors, copiedId, onCopy, onEdit, dimmed }: {
+function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
+  contractors: Contractor[]
+  pendingFor: (id: string) => PendingRow[]
+  onClose: () => void
+  onSent: (ids: string[]) => void
+}) {
+  type Result = 'sent' | 'skipped' | string
+  const [running, setRunning] = useState(false)
+  const [results, setResults] = useState<Record<string, Result>>({})
+  const sendable = contractors.filter(c => c.email)
+  const noEmail = contractors.filter(c => !c.email)
+  const done = Object.keys(results).length > 0 && !running
+
+  async function sendAll() {
+    setRunning(true)
+    for (const c of sendable) {
+      const ids = pendingFor(c.id).map(i => i.id)
+      const res = await fetch(`/api/contractors/${c.id}/notify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'email', item_ids: ids }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        onSent(ids)
+        window.dispatchEvent(new Event(COUNTS_CHANGED_EVENT))
+      }
+      setResults(prev => ({ ...prev, [c.id]: res.ok ? 'sent' : (json.error ?? 'Failed') }))
+    }
+    setRunning(false)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={() => !running && onClose()}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Notify all contractors</h2>
+          <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={onClose} disabled={running}>✕</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            Each contractor below gets one email listing their new items and their portal link.
+          </p>
+          <table className="data-table" style={{ marginBottom: 0 }}>
+            <thead><tr><th>Contractor</th><th>Email</th><th style={{ textAlign: 'right' }}>New</th><th></th></tr></thead>
+            <tbody>
+              {contractors.map(c => {
+                const r = results[c.id]
+                return (
+                  <tr key={c.id} style={{ opacity: c.email ? 1 : 0.55 }}>
+                    <td style={{ fontWeight: 500 }}>{c.company_name}</td>
+                    <td style={{ fontSize: 13, color: '#787774' }}>{c.email ?? 'No email — skipped'}</td>
+                    <td style={{ textAlign: 'right', fontSize: 13 }}>{pendingFor(c.id).length || '—'}</td>
+                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                      {r === 'sent' && <span style={{ color: '#0f7b6c' }}>✓ Sent</span>}
+                      {r && r !== 'sent' && <span style={{ color: '#e03131' }} title={r}>Failed</span>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {noEmail.length > 0 && (
+            <p style={{ margin: 0, fontSize: 13, color: '#787774' }}>
+              {noEmail.length} contractor{noEmail.length !== 1 ? 's have' : ' has'} no email address and will be skipped.
+            </p>
+          )}
+          {Object.values(results).some(r => r !== 'sent') && (
+            <p style={{ margin: 0, fontSize: 13, color: '#e03131' }}>
+              {Object.entries(results).filter(([, r]) => r !== 'sent').map(([id, r]) => `${contractors.find(c => c.id === id)?.company_name}: ${r}`).join(' · ')}
+            </p>
+          )}
+        </div>
+        <div className="modal-footer">
+          {done ? (
+            <button className="btn btn-primary" onClick={onClose}>Done</button>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={onClose} disabled={running}>Cancel</button>
+              <button className="btn btn-primary" onClick={sendAll} disabled={running || sendable.length === 0}>
+                <Mail size={14} /> {running ? 'Sending…' : `Send ${sendable.length} email${sendable.length !== 1 ? 's' : ''}`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts, onNotify, dimmed }: {
   contractors: Contractor[]
   copiedId: string | null
   onCopy: (c: Contractor) => void
   onEdit: (c: Contractor) => void
+  pendingCounts: Record<string, number>
+  onNotify: (c: Contractor) => void
   dimmed?: boolean
 }) {
   return (
     <table className="data-table" style={{ opacity: dimmed ? 0.6 : 1 }}>
       <thead>
-        <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>Portal</th><th></th></tr>
+        <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>New items</th><th>Portal</th><th></th></tr>
       </thead>
       <tbody>
         {contractors.map(c => (
@@ -210,6 +346,23 @@ function ContractorTable({ contractors, copiedId, onCopy, onEdit, dimmed }: {
             <td style={{ color: '#787774', fontSize: 13 }}>{c.contact_name ?? '—'}</td>
             <td style={{ color: '#787774', fontSize: 13 }}>{c.email ?? '—'}</td>
             <td style={{ color: '#787774', fontSize: 13 }}>{c.phone ?? '—'}</td>
+            <td>
+              {pendingCounts[c.id] ? (
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: '3px 8px', fontSize: 12, color: '#2383e2', gap: 6 }}
+                  onClick={() => onNotify(c)}
+                  title="Email this contractor about their new items"
+                >
+                  <span style={{ background: '#e7f1fb', color: '#1f6fbf', borderRadius: 10, padding: '1px 8px', fontWeight: 600, fontSize: 11 }}>
+                    {pendingCounts[c.id]} new
+                  </span>
+                  <Mail size={13} /> Notify
+                </button>
+              ) : (
+                <span style={{ color: '#c4c4c0', fontSize: 13 }}>—</span>
+              )}
+            </td>
             <td>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button

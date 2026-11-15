@@ -520,6 +520,9 @@ function formatActivityLog(log: ActivityLog): string {
     case 'status_changed': return `changed status from ${STATUS_LABELS[d?.from as MaintenanceStatus] ?? d?.from} to ${STATUS_LABELS[d?.to as MaintenanceStatus] ?? d?.to}`
     case 'contractor_assigned': return 'assigned contractor'
     case 'work_order_added': return 'added to work order'
+    case 'contractor_notified': return d?.method === 'email'
+      ? `emailed ${d?.contractor ?? 'the contractor'} about this item`
+      : `marked ${d?.contractor ?? 'the contractor'} as told about this item`
     case 'assignee_changed': return d?.to ? `assigned item to ${d?.to_name ?? 'a user'}` : 'unassigned item'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'

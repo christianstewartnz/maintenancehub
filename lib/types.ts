@@ -99,6 +99,8 @@ export interface MaintenanceItem {
   completed_at: string | null
   scheduled_date: string | null
   assigned_to: string | null
+  /** When the contractor was last emailed (or marked as told) about this item; null = not yet. */
+  contractor_notified_at: string | null
   unit?: Unit & { project?: Project }
   trade?: Trade
   contractor?: Contractor
