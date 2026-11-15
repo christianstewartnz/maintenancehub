@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -28,6 +29,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState(false)
   const supabase = createClient()
+  const router = useRouter()
 
   function toggleSelected(id: string) {
     setSelected(prev => {
@@ -49,6 +51,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       const done = new Set(ids)
       setItems(prev => prev.map(i => done.has(i.id) ? { ...i, status: 'complete', completed_at } : i))
       setSelected(new Set())
+      router.refresh()
     }
     setCompleting(false)
   }

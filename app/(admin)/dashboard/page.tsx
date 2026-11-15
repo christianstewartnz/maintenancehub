@@ -39,6 +39,7 @@ export default async function DashboardPage() {
         projects={projectsRes.data ?? []}
         items={(openItemsRes.data ?? []) as any}
         scheduledItems={(scheduledItemsRes.data ?? []) as any}
+        loadedAt={Date.now()}
       />
     </div>
   )

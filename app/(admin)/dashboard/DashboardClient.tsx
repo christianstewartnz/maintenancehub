@@ -16,6 +16,7 @@ interface Props {
   projects: Project[]
   items: MaintenanceItem[]
   scheduledItems: MaintenanceItem[]
+  loadedAt: number
 }
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
@@ -391,7 +392,7 @@ function MonthCalendar({ items, onClose }: { items: MaintenanceItem[]; onClose: 
 }
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
-export default function DashboardClient({ projects, items, scheduledItems }: Props) {
+export default function DashboardClient({ projects, items, scheduledItems, loadedAt }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<MaintenanceStatus | 'all'>('all')
@@ -405,7 +406,20 @@ export default function DashboardClient({ projects, items, scheduledItems }: Pro
       .channel('dashboard_realtime')
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'maintenance_items' }, () => router.refresh())
       .subscribe((status: string) => setIsLive(status === 'SUBSCRIBED'))
-    return () => { supabase.removeChannel(channel) }
+
+    // Realtime only hears changes made while this page is open. Back/forward
+    // navigation restores the old server payload, so if it's more than a few
+    // seconds old (e.g. items were completed on another page), fetch fresh data.
+    if (Date.now() - loadedAt > 5000) router.refresh()
+
+    // Also catch up when returning to a tab that was in the background.
+    const onVisible = () => { if (document.visibilityState === 'visible') router.refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      supabase.removeChannel(channel)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   const filteredItems = statusFilter === 'all' ? items : items.filter(i => i.status === statusFilter)
