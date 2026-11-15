@@ -9,7 +9,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   const { id } = await params
   const supabase = await createClient()
 
-  const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes] = await Promise.all([
+  const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes, updatesRes] = await Promise.all([
     supabase.from('maintenance_items').select(`
       id, item_number, title, description, status, created_at, updated_at, completed_at,
       contractor_id, trade_id, unit_id,
@@ -22,6 +22,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
     supabase.from('contractor_comments').select('*').eq('maintenance_item_id', id).order('created_at'),
     supabase.from('maintenance_item_attachments').select('*').eq('maintenance_item_id', id).order('created_at'),
     supabase.from('contractors').select('id, company_name').order('company_name'),
+    supabase.from('item_updates').select('*').eq('maintenance_item_id', id).order('created_at', { ascending: false }),
   ])
 
   if (!itemRes.data) notFound()
@@ -45,6 +46,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         item={itemRes.data as any}
         activity={activityRes.data ?? []}
         comments={commentsRes.data ?? []}
+        updates={updatesRes.data ?? []}
         attachments={attachmentsRes.data ?? []}
         contractors={contractorsRes.data ?? []}
         trades={tradesRes.data ?? []}

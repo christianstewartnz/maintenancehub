@@ -131,6 +131,22 @@ export interface ContractorComment {
   created_at: string
 }
 
+export interface ItemUpdate {
+  id: string
+  maintenance_item_id: string
+  author: string
+  content: string
+  source: string
+  email_message_id: string | null
+  email_subject: string | null
+  email_from: string | null
+  email_to: string | null
+  email_date: string | null
+  status_from: string | null
+  status_to: string | null
+  created_at: string
+}
+
 export interface NotificationPreferences {
   id: string
   user_id: string

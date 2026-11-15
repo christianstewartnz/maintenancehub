@@ -872,6 +872,37 @@ server.tool(
 )
 
 server.tool(
+  'apply_email_update',
+  'Record an internal update on a maintenance item based on an email (not visible to contractors), optionally moving the status forward. Status can only move forward to assigned / in_progress / contractor_complete; "assigned" needs a contractor on the item or a contractor_email matching exactly one active contractor. The same email_message_id is only applied once per item.',
+  {
+    item_number: z.string().describe('Item number e.g. "MI-0042"'),
+    note: z.string().describe('Short update, e.g. "Emailed Smith Plumbing asking them to quote and book in."'),
+    new_status: z.enum(['assigned', 'in_progress', 'contractor_complete']).optional(),
+    contractor_email: z.string().optional().describe('Contractor email address from the email; sets the contractor only if the item has none'),
+    email_message_id: z.string().optional().describe('Outlook message id, used to avoid applying the same email twice'),
+    email_subject: z.string().optional(),
+    email_from: z.string().optional(),
+    email_to: z.string().optional(),
+    email_date: z.string().optional().describe('ISO timestamp the email was sent/received'),
+  },
+  async (args) => {
+    const { data, error } = await supabase.rpc('apply_email_update', {
+      p_item_number: args.item_number,
+      p_note: args.note,
+      p_new_status: args.new_status ?? null,
+      p_contractor_email: args.contractor_email ?? null,
+      p_email_message_id: args.email_message_id ?? null,
+      p_email_subject: args.email_subject ?? null,
+      p_email_from: args.email_from ?? null,
+      p_email_to: args.email_to ?? null,
+      p_email_date: args.email_date ?? null,
+    })
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    return { content: [{ type: 'text', text: JSON.stringify(data) }] }
+  },
+)
+
+server.tool(
   'assign_contractor',
   'Assign a contractor to a maintenance item',
   {

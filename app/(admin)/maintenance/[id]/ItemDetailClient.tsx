@@ -5,19 +5,20 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, MaintenanceItemAttachment, MaintenanceStatus, Trade } from '@/lib/types'
-import { Pencil } from 'lucide-react'
+import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade } from '@/lib/types'
+import { Pencil, Mail } from 'lucide-react'
 
 interface Props {
   item: MaintenanceItem & { unit: any; trade: any; contractor: any; work_order: any }
   activity: ActivityLog[]
   comments: ContractorComment[]
+  updates: ItemUpdate[]
   attachments: MaintenanceItemAttachment[]
   contractors: { id: string; company_name: string }[]
   trades: Trade[]
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, contractors, trades }: Props) {
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, contractors, trades }: Props) {
   const [item, setItem] = useState(initial)
   const [activity, setActivity] = useState(initialActivity)
   const [comments, setComments] = useState(initialComments)
@@ -147,6 +148,38 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             <button className="btn btn-primary" onClick={advanceStatus} disabled={updatingStatus}>
               {updatingStatus ? 'Updating…' : `Mark as ${STATUS_LABELS[next]}`}
             </button>
+          </div>
+        )}
+
+        {/* Email updates (internal — not shown in the contractor portal) */}
+        {updates.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>Email updates</h3>
+            <p style={{ color: '#787774', fontSize: 12, margin: '0 0 12px' }}>Added by Claude from your emails. Internal only — contractors can't see these.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {updates.map(u => (
+                <div key={u.id} style={{ background: '#f2f7fd', borderLeft: '3px solid #2383e2', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
+                    <Mail size={13} color="#2383e2" />
+                    <span style={{ fontWeight: 500, fontSize: 13 }}>Claude</span>
+                    <span style={{ color: '#787774', fontSize: 12 }}>{formatDateTime(u.created_at)}</span>
+                    {u.status_to && (
+                      <span style={{ fontSize: 12, color: '#37352f' }}>
+                        · {STATUS_LABELS[u.status_from as MaintenanceStatus] ?? u.status_from} → <strong>{STATUS_LABELS[u.status_to as MaintenanceStatus] ?? u.status_to}</strong>
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 14, whiteSpace: 'pre-wrap' }}>{u.content}</p>
+                  {(u.email_subject || u.email_from) && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: '#787774' }}>
+                      {u.email_from && <>From {u.email_from}{u.email_to ? ` to ${u.email_to}` : ''}</>}
+                      {u.email_date && <> · {formatDateTime(u.email_date)}</>}
+                      {u.email_subject && <> · “{u.email_subject}”</>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -362,6 +395,7 @@ function formatActivityLog(log: ActivityLog): string {
     case 'work_order_added': return 'added to work order'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'
+    case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
     default: return log.action.replace(/_/g, ' ')
   }
 }
