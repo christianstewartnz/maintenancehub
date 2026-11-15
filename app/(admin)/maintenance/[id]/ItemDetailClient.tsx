@@ -6,7 +6,7 @@ import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade } from '@/lib/types'
-import { Pencil, Mail } from 'lucide-react'
+import { Pencil, Mail, CheckCircle2, RotateCcw } from 'lucide-react'
 
 interface Props {
   item: MaintenanceItem & { unit: any; trade: any; contractor: any; work_order: any }
@@ -36,22 +36,28 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
 
   const next = nextStatus(item.status)
 
-  async function advanceStatus() {
-    if (!next) return
+  async function setStatus(to: MaintenanceStatus) {
+    if (to === item.status) return
     setUpdatingStatus(true)
-    const { data } = await supabase.from('maintenance_items').update({ status: next }).eq('id', item.id).select().single()
+    const completed_at = to === 'complete' ? new Date().toISOString() : null
+    const { data } = await supabase.from('maintenance_items').update({ status: to, completed_at }).eq('id', item.id).select().single()
     if (data) {
-      setItem(prev => ({ ...prev, status: next }))
+      setItem(prev => ({ ...prev, status: to, completed_at: data.completed_at ?? completed_at }))
       setActivity(prev => [{
         id: Math.random().toString(),
         maintenance_item_id: item.id,
         action: 'status_changed',
-        details: { from: item.status, to: next },
+        details: { from: item.status, to },
         performed_by: 'admin',
         created_at: new Date().toISOString(),
       }, ...prev])
+      router.refresh()
     }
     setUpdatingStatus(false)
+  }
+
+  function advanceStatus() {
+    if (next) setStatus(next)
   }
 
   async function handleAssignContractor() {
@@ -140,13 +146,29 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
         </div>
 
         {/* Status advancement */}
-        {next && (
-          <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {next ? (
+          <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 14, color: '#787774' }}>
               Advance to <strong style={{ color: '#37352f' }}>{STATUS_LABELS[next]}</strong>
             </span>
-            <button className="btn btn-primary" onClick={advanceStatus} disabled={updatingStatus}>
-              {updatingStatus ? 'Updating…' : `Mark as ${STATUS_LABELS[next]}`}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {next !== 'complete' && (
+                <button className="btn btn-secondary" onClick={advanceStatus} disabled={updatingStatus}>
+                  {`Mark as ${STATUS_LABELS[next]}`}
+                </button>
+              )}
+              <button className="btn btn-primary" onClick={() => setStatus('complete')} disabled={updatingStatus}>
+                <CheckCircle2 size={15} /> {updatingStatus ? 'Updating…' : 'Mark Complete'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f2f9f4', border: '1px solid #d6ecdc', borderRadius: 8, padding: '14px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, color: '#2f7d4a', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={15} /> Completed{item.completed_at ? ` ${formatDateTime(item.completed_at)}` : ''}
+            </span>
+            <button className="btn btn-ghost" style={{ color: '#787774', fontSize: 13 }} onClick={() => setStatus('in_progress')} disabled={updatingStatus}>
+              <RotateCcw size={13} /> {updatingStatus ? 'Updating…' : 'Reopen'}
             </button>
           </div>
         )}

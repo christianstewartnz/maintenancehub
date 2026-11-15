@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Download, Plus, Search, X } from 'lucide-react'
+import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getAgeClass, formatDate } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
@@ -24,6 +25,33 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | ''>('')
   const [filterContractor, setFilterContractor] = useState('')
   const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [completing, setCompleting] = useState(false)
+  const supabase = createClient()
+
+  function toggleSelected(id: string) {
+    setSelected(prev => {
+      const s = new Set(prev)
+      s.has(id) ? s.delete(id) : s.add(id)
+      return s
+    })
+  }
+
+  async function markSelectedComplete(ids: string[]) {
+    if (!ids.length) return
+    if (!confirm(`Mark ${ids.length} item${ids.length !== 1 ? 's' : ''} as complete?`)) return
+    setCompleting(true)
+    const completed_at = new Date().toISOString()
+    const { error } = await supabase.from('maintenance_items').update({ status: 'complete', completed_at }).in('id', ids)
+    if (error) {
+      alert(`Couldn't mark complete: ${error.message}`)
+    } else {
+      const done = new Set(ids)
+      setItems(prev => prev.map(i => done.has(i.id) ? { ...i, status: 'complete', completed_at } : i))
+      setSelected(new Set())
+    }
+    setCompleting(false)
+  }
 
   const unitsForProject = useMemo(() => {
     if (!filterProject) return []
@@ -57,6 +85,15 @@ export default function MaintenanceClient({ items: initial, projects, contractor
 
     return result
   }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, sortBy])
+
+  // Only act on selected items that are still visible and not already complete
+  const selectable = filtered.filter(i => i.status !== 'complete')
+  const selectedVisible = selectable.filter(i => selected.has(i.id)).map(i => i.id)
+  const allSelected = selectable.length > 0 && selectedVisible.length === selectable.length
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
+  }
 
   const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterContractor)
 
@@ -155,6 +192,26 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         </div>
       )}
 
+      {/* Bulk action bar */}
+      {selectedVisible.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, padding: '10px 14px', background: '#f2f7fd', border: '1px solid #d3e5f8', borderRadius: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 500, color: '#37352f' }}>
+            {selectedVisible.length} selected
+          </span>
+          <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => markSelectedComplete(selectedVisible)}
+            disabled={completing}
+          >
+            <CheckCheck size={15} /> {completing ? 'Marking complete…' : `Mark ${selectedVisible.length} complete`}
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       {filtered.length === 0 ? (
         <div className="empty-state">
@@ -176,6 +233,17 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: 1 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all open items"
+                    checked={allSelected}
+                    ref={el => { if (el) el.indeterminate = selectedVisible.length > 0 && !allSelected }}
+                    onChange={toggleAll}
+                    disabled={selectable.length === 0}
+                    style={checkboxStyle}
+                  />
+                </th>
                 <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th>
                 <th>Trade</th><th>Contractor</th><th>Status</th>
                 <th>Age</th>
@@ -187,7 +255,18 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                 const ageClass = getAgeClass(item.created_at)
                 const unit = item.unit as any
                 return (
-                  <tr key={item.id} className={ageClass}>
+                  <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : undefined}>
+                    <td style={{ width: 1 }}>
+                      {item.status !== 'complete' && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${item.item_number}`}
+                          checked={selected.has(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                          style={checkboxStyle}
+                        />
+                      )}
+                    </td>
                     <td style={{ color: '#787774', fontSize: 13, whiteSpace: 'nowrap' }}>{item.item_number}</td>
                     <td style={{ maxWidth: 240 }}>
                       <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>
@@ -220,3 +299,5 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     </div>
   )
 }
+
+const checkboxStyle: React.CSSProperties = { width: 16, height: 16, cursor: 'pointer', accentColor: '#2383e2', display: 'block' }
