@@ -50,6 +50,11 @@ body {
 .age-amber { background-color: #fffbeb !important; }
 .age-red   { background-color: #fff1f1 !important; }
 
+/* Completed items: full green row, overrides age tint and hover */
+.row-complete,
+.row-complete td,
+.data-table tbody tr.row-complete:hover td { background-color: #dcf0dc !important; }
+
 /* ── Sidebar ────────────────────────────────────────────────────────── */
 .sidebar {
   width: 240px;

@@ -255,7 +255,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             <tbody>
               {filtered.map(item => {
                 const days = getDaysSince(item.created_at)
-                const ageClass = getAgeClass(item.created_at)
+                const isComplete = item.status === 'complete'
+                const ageClass = isComplete ? 'row-complete' : getAgeClass(item.created_at)
                 const unit = item.unit as any
                 return (
                   <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : undefined}>
@@ -281,7 +282,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.trade as any)?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{(item.contractor as any)?.company_name ?? '—'}</td>
                     <td><StatusBadge status={item.status} /></td>
-                    <td style={{ fontSize: 13, color: days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
+                    <td style={{ fontSize: 13, color: isComplete ? '#1d6a38' : days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
                       {days}d
                     </td>
                   </tr>
