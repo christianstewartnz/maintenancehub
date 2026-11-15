@@ -3,8 +3,10 @@
 import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime } from '@/lib/utils'
-import type { MaintenanceStatus } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Paperclip, Calendar } from 'lucide-react'
+import type { MaintenanceStatus, PhotoType } from '@/lib/types'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Camera, Calendar } from 'lucide-react'
+import ItemPhotos from '@/components/ui/ItemPhotos'
+import type { PhotoWithUrl } from '@/lib/photos'
 
 interface Props {
   contractor: { id: string; company_name: string; contact_name: string | null }
@@ -40,12 +42,14 @@ interface ItemProps {
   isStatusSubmitting: boolean
   isCommentSubmitting: boolean
   isDateSubmitting: boolean
+  onUploadPhoto: (blob: Blob, fileName: string, type: PhotoType) => Promise<PhotoWithUrl | string>
+  onPhotosChange: (photos: PhotoWithUrl[]) => void
 }
 
 function ItemRow({
   item, isExpanded, onToggle,
   comment, onComment, onSubmitComment,
-  onUpdateStatus, onSetScheduledDate,
+  onUpdateStatus, onSetScheduledDate, onUploadPhoto, onPhotosChange,
   isStatusSubmitting, isCommentSubmitting, isDateSubmitting,
 }: ItemProps) {
   const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
@@ -75,7 +79,7 @@ function ItemRow({
             )}
             {item.attachments?.length > 0 && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#a0a09e' }}>
-                <Paperclip size={11} /> {item.attachments.length}
+                <Camera size={11} /> {item.attachments.length}
               </span>
             )}
           </div>
@@ -93,50 +97,19 @@ function ItemRow({
             <p style={{ margin: '0 0 14px', fontSize: 14, color: '#37352f', whiteSpace: 'pre-wrap' }}>{item.description}</p>
           )}
 
-          {item.attachments?.length > 0 && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Attachments
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {item.attachments.map((att: any) => {
-                  const isImage = att.file_type?.startsWith('image/')
-                  return (
-                    <a
-                      key={att.id}
-                      href={att.file_url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      style={{ display: 'block', textDecoration: 'none' }}
-                    >
-                      {isImage ? (
-                        <img
-                          src={att.file_url}
-                          alt={att.file_name}
-                          style={{
-                            width: 100, height: 100, objectFit: 'cover',
-                            borderRadius: 6, border: '1px solid #e9e9e7',
-                          }}
-                        />
-                      ) : (
-                        <div style={{
-                          width: 100, height: 100, borderRadius: 6,
-                          border: '1px solid #e9e9e7', background: '#f7f7f5',
-                          display: 'flex', flexDirection: 'column', alignItems: 'center',
-                          justifyContent: 'center', gap: 6, padding: 8,
-                        }}>
-                          <Paperclip size={20} style={{ color: '#a0a09e' }} />
-                          <span style={{ fontSize: 10, color: '#787774', textAlign: 'center', wordBreak: 'break-all', lineHeight: 1.3 }}>
-                            {att.file_name}
-                          </span>
-                        </div>
-                      )}
-                    </a>
-                  )
-                })}
-              </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Photos
             </div>
-          )}
+            <ItemPhotos
+              compact
+              initialPhotos={item.attachments ?? []}
+              uploadTypes={['after']}
+              onUpload={onUploadPhoto}
+              onChange={onPhotosChange}
+              hints={{ before: 'No inspection photos for this item.', after: 'Take a photo of the finished work and add it here before marking complete.' }}
+            />
+          </div>
 
           {(item.status === 'assigned' || item.status === 'in_progress') && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -286,7 +259,26 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     })
   }
 
+  async function uploadPhoto(itemId: string, blob: Blob, fileName: string): Promise<PhotoWithUrl | string> {
+    const form = new FormData()
+    form.append('item_id', itemId)
+    form.append('file', blob, fileName)
+    try {
+      const res = await fetch(`/api/portal/${token}/upload-photo`, { method: 'POST', body: form })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.data) return json.error ?? `Upload failed (${res.status})`
+      return json.data
+    } catch {
+      return 'Upload failed — check your connection and try again'
+    }
+  }
+
   async function updateStatus(itemId: string, status: MaintenanceStatus) {
+    if (status === 'contractor_complete') {
+      const item = items.find(i => i.id === itemId)
+      const hasAfter = (item?.attachments ?? []).some((a: any) => a.photo_type === 'after')
+      if (!hasAfter && !confirm('You haven’t added a completion photo yet. Mark complete without one?')) return
+    }
     setSubmitting(prev => ({ ...prev, [itemId]: true }))
     await fetch(`/api/portal/${token}/update-status`, {
       method: 'POST',
@@ -466,6 +458,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     isStatusSubmitting={!!submitting[item.id]}
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
                                     isDateSubmitting={!!submitting[`date-${item.id}`]}
+                                    onUploadPhoto={(blob, name) => uploadPhoto(item.id, blob, name)}
+                                    onPhotosChange={photos => setItems(prev => prev.map(i => i.id === item.id ? { ...i, attachments: photos } : i))}
                                   />
                                 ))}
                               </div>

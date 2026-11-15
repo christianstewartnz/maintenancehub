@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import ItemDetailClient from './ItemDetailClient'
+import { withSignedUrls } from '@/lib/photos'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,8 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
 
   if (!itemRes.data) notFound()
 
+  const attachments = await withSignedUrls(supabase, attachmentsRes.data ?? [])
+
   const projectId = (itemRes.data as any).unit?.project?.id
   const tradesRes = projectId
     ? await supabase.from('trades').select('*').eq('project_id', projectId).order('name')
@@ -49,7 +52,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         activity={activityRes.data ?? []}
         comments={commentsRes.data ?? []}
         updates={updatesRes.data ?? []}
-        attachments={attachmentsRes.data ?? []}
+        attachments={attachments}
         contractors={contractorsRes.data ?? []}
         trades={tradesRes.data ?? []}
         users={usersRes.data ?? []}

@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import PortalClient from './PortalClient'
+import { createServiceClient } from '@/lib/supabase/service'
+import { withSignedUrls } from '@/lib/photos'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,10 +15,16 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
 
   const { data: items } = await supabase.rpc('get_portal_items', { p_token: token })
 
+  // The bucket is private: sign every attachment's URL server-side (token already verified above).
+  const list: any[] = (items as any) ?? []
+  const signed = await withSignedUrls(createServiceClient(), list.flatMap(i => i.attachments ?? []))
+  const byId = new Map(signed.map(a => [a.id, a]))
+  const withPhotos = list.map(i => ({ ...i, attachments: (i.attachments ?? []).map((a: any) => byId.get(a.id) ?? a) }))
+
   return (
     <PortalClient
       contractor={contractor as any}
-      items={(items as any) ?? []}
+      items={withPhotos}
       token={token}
     />
   )

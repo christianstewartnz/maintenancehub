@@ -8,20 +8,23 @@ import { useRouter } from 'next/navigation'
 import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile } from '@/lib/types'
 import { profileName } from '@/lib/assignees'
 import { Pencil, Mail, CheckCircle2, RotateCcw } from 'lucide-react'
+import ItemPhotos from '@/components/ui/ItemPhotos'
+import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, PHOTO_TYPE_LABELS, type PhotoWithUrl } from '@/lib/photos'
+import type { PhotoType } from '@/lib/types'
 
 interface Props {
   item: MaintenanceItem & { unit: any; trade: any; contractor: any; work_order: any }
   activity: ActivityLog[]
   comments: ContractorComment[]
   updates: ItemUpdate[]
-  attachments: MaintenanceItemAttachment[]
+  attachments: (MaintenanceItemAttachment & { url: string | null })[]
   contractors: { id: string; company_name: string }[]
   trades: Trade[]
   users: Profile[]
   currentUserId: string
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, contractors, trades, users, currentUserId }: Props) {
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, users, currentUserId }: Props) {
   const [item, setItem] = useState(initial)
   const [activity, setActivity] = useState(initialActivity)
   const [comments, setComments] = useState(initialComments)
@@ -106,6 +109,47 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       }, ...prev])
     }
     setSavingAssignee(false)
+  }
+
+  function logActivity(action: string, details: Record<string, unknown>, performedBy: string) {
+    setActivity(prev => [{
+      id: Math.random().toString(),
+      maintenance_item_id: item.id,
+      action,
+      details,
+      performed_by: performedBy,
+      created_at: new Date().toISOString(),
+    }, ...prev])
+    // Best-effort: the photo is saved either way
+    supabase.from('activity_log').insert({ maintenance_item_id: item.id, action, details, performed_by: performedBy }).then(() => {})
+  }
+
+  async function uploadPhoto(blob: Blob, fileName: string, type: PhotoType): Promise<PhotoWithUrl | string> {
+    const me = users.find(u => u.id === currentUserId)
+    const uploadedBy = me ? profileName(me) : 'admin'
+    const contentType = blob.type || 'image/jpeg'
+    const path = photoStoragePath(item.id, contentType)
+    const { error: upErr } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, blob, { contentType })
+    if (upErr) return upErr.message
+    const { data: row, error: insErr } = await supabase
+      .from('maintenance_item_attachments')
+      .insert({ maintenance_item_id: item.id, file_url: path, file_type: contentType, file_name: fileName, uploaded_by: uploadedBy, photo_type: type })
+      .select()
+      .single()
+    if (insErr || !row) {
+      await supabase.storage.from(ATTACHMENTS_BUCKET).remove([path])
+      return insErr?.message ?? 'Could not save photo'
+    }
+    const { data: signed } = await supabase.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
+    logActivity('photo_added', { photo_type: type, file_name: fileName }, uploadedBy)
+    return { ...row, url: signed?.signedUrl ?? null }
+  }
+
+  async function deletePhoto(photo: PhotoWithUrl): Promise<string | null> {
+    const { error } = await supabase.from('maintenance_item_attachments').delete().eq('id', photo.id)
+    if (error) return error.message
+    if (!/^https?:\/\//.test(photo.file_url)) await supabase.storage.from(ATTACHMENTS_BUCKET).remove([photo.file_url])
+    return null
   }
 
   async function saveScheduledDate(date: string) {
@@ -196,6 +240,21 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             </button>
           </div>
         )}
+
+        {/* Before / after photos */}
+        <div style={{ marginBottom: 28 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>Photos</h3>
+          <p style={{ color: '#787774', fontSize: 12, margin: '0 0 12px' }}>
+            Before photos from inspection, after photos from the contractor on completion. Contractors see both in their portal.
+          </p>
+          <ItemPhotos
+            initialPhotos={attachments}
+            uploadTypes={['before', 'after']}
+            onUpload={uploadPhoto}
+            onDelete={deletePhoto}
+            hints={{ before: 'Add photos from the inspection.', after: 'The contractor adds these from their portal when the job is done.' }}
+          />
+        </div>
 
         {/* Email updates (internal — not shown in the contractor portal) */}
         {updates.length > 0 && (
@@ -464,6 +523,7 @@ function formatActivityLog(log: ActivityLog): string {
     case 'assignee_changed': return d?.to ? `assigned item to ${d?.to_name ?? 'a user'}` : 'unassigned item'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'
+    case 'photo_added': return `added ${d?.photo_type ? `a ${PHOTO_TYPE_LABELS[d.photo_type as PhotoType].toLowerCase()}` : 'a'} photo`
     case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
     default: return log.action.replace(/_/g, ' ')
   }

@@ -112,13 +112,18 @@ export interface Profile {
   full_name: string | null
 }
 
+export type PhotoType = 'before' | 'after'
+
 export interface MaintenanceItemAttachment {
   id: string
   maintenance_item_id: string
+  /** Storage path in the maintenance-attachments bucket (older rows may hold a full URL). */
   file_url: string
   file_type: string | null
   file_name: string | null
   uploaded_by: string
+  /** 'before' = inspection photo, 'after' = completion photo, null = general attachment. */
+  photo_type: PhotoType | null
   created_at: string
 }
 
