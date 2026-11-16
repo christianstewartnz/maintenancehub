@@ -9,9 +9,10 @@ export const MAX_PHOTO_BYTES = 10 * 1024 * 1024
 
 export type PhotoWithUrl = MaintenanceItemAttachment & { url: string | null }
 
+/** Display names. Stored values stay 'before' / 'after'. */
 export const PHOTO_TYPE_LABELS: Record<PhotoType, string> = {
-  before: 'Before',
-  after: 'After',
+  before: 'Inspection photo',
+  after: 'Completion photo',
 }
 
 /** Storage path for a new photo on an item. */

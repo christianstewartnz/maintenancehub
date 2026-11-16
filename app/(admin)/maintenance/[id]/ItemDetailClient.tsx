@@ -9,7 +9,7 @@ import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, Maint
 import { profileName } from '@/lib/assignees'
 import { Pencil, Mail, CheckCircle2, RotateCcw } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
-import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, PHOTO_TYPE_LABELS, type PhotoWithUrl } from '@/lib/photos'
+import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, type PhotoWithUrl } from '@/lib/photos'
 import type { PhotoType } from '@/lib/types'
 
 interface Props {
@@ -241,18 +241,18 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
           </div>
         )}
 
-        {/* Before / after photos */}
+        {/* Inspection / completion photos */}
         <div style={{ marginBottom: 28 }}>
           <h3 style={{ fontSize: 14, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>Photos</h3>
           <p style={{ color: '#787774', fontSize: 12, margin: '0 0 12px' }}>
-            Before photos from inspection, after photos from the contractor on completion. Contractors see both in their portal.
+            Inspection photos are taken by us on site; completion photos are added by the contractor when the job is done. Contractors see both in their portal.
           </p>
           <ItemPhotos
             initialPhotos={attachments}
             uploadTypes={['before', 'after']}
             onUpload={uploadPhoto}
             onDelete={deletePhoto}
-            hints={{ before: 'Add photos from the inspection.', after: 'The contractor adds these from their portal when the job is done.' }}
+            hints={{ before: 'Add photos taken at inspection.', after: 'The contractor adds these from their portal when the job is done.' }}
           />
         </div>
 
@@ -526,7 +526,9 @@ function formatActivityLog(log: ActivityLog): string {
     case 'assignee_changed': return d?.to ? `assigned item to ${d?.to_name ?? 'a user'}` : 'unassigned item'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'
-    case 'photo_added': return `added ${d?.photo_type ? `a ${PHOTO_TYPE_LABELS[d.photo_type as PhotoType].toLowerCase()}` : 'a'} photo`
+    case 'photo_added': return d?.photo_type === 'before' ? 'added an inspection photo'
+      : d?.photo_type === 'after' ? 'added a completion photo'
+      : 'added a photo'
     case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
     default: return log.action.replace(/_/g, ' ')
   }

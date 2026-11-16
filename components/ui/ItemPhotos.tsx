@@ -84,7 +84,7 @@ export default function ItemPhotos({ initialPhotos, uploadTypes, onUpload, onDel
             <div key={type} style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '10px 12px', background: 'white' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: list.length || hints?.[type] ? 8 : 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#37352f' }}>
-                  {PHOTO_TYPE_LABELS[type]} <span style={{ color: '#a0a09e', fontWeight: 400 }}>({list.length})</span>
+                  {PHOTO_TYPE_LABELS[type]}s <span style={{ color: '#a0a09e', fontWeight: 400 }}>({list.length})</span>
                 </span>
                 {canUpload && (
                   <UploadButton

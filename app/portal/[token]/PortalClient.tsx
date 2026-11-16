@@ -121,7 +121,7 @@ function ItemRow({
               uploadTypes={['after']}
               onUpload={onUploadPhoto}
               onChange={onPhotosChange}
-              hints={{ before: 'No inspection photos for this item.', after: 'Take a photo of the finished work and add it here before marking complete.' }}
+              hints={{ before: 'No inspection photos for this item.', after: 'Take a photo of the finished work and add it here before marking the job complete.' }}
             />
           </div>
 
@@ -428,8 +428,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                 {/* Owner / access details — always visible on the unit row */}
                                 {(hasOwners || hasAddress) && (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                    {hasOwners && unit.owners.map((o: any) => (
-                                      <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#37352f' }}>
+                                    {hasOwners && unit.owners.map((o: any, i: number) => (
+                                      // get_portal_items returns owners without an id
+                                      <div key={`${i}-${o.name}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#37352f' }}>
                                         <User size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />
                                         <span>{o.name}</span>
                                         {o.phone && (
