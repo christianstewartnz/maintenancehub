@@ -50,9 +50,14 @@ export async function GET(request: Request) {
     if (!ids.length) query = query.eq('unit_id', '00000000-0000-0000-0000-000000000000')
     else query = query.in('unit_id', ids)
   }
-  // Matches the page: no status filter means all open (non-complete) items
-  if (status && STATUSES.includes(status as MaintenanceStatus)) query = query.eq('status', status)
-  else query = query.neq('status', 'complete')
+  // Matches the page: no status filter means all open (non-complete) items;
+  // archived items only appear in the "archived" view.
+  if (status === 'archived') query = query.not('archived_at', 'is', null)
+  else {
+    query = query.is('archived_at', null)
+    if (status && STATUSES.includes(status as MaintenanceStatus)) query = query.eq('status', status)
+    else query = query.neq('status', 'complete')
+  }
   if (contractorId === 'none') query = query.is('contractor_id', null)
   else if (contractorId) query = query.eq('contractor_id', contractorId)
 

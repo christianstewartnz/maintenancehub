@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
+import { Archive, ArchiveRestore, CheckCheck, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
@@ -28,7 +28,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [search, setSearch] = useState('')
   const [filterProject, setFilterProject] = useState('')
   const [filterUnit, setFilterUnit] = useState('')
-  const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | ''>('')
+  // 'archived' is a pseudo-status: shows archived items only (any real status)
+  const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | 'archived' | ''>('')
   const [filterContractor, setFilterContractor] = useState('')
   const [filterAssignee, setFilterAssignee] = useState('')
   const [assigning, setAssigning] = useState(false)
@@ -36,6 +37,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -98,6 +100,27 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     setCompleting(false)
   }
 
+  async function setArchived(ids: string[], archive: boolean) {
+    if (!ids.length) return
+    const n = `${ids.length} item${ids.length !== 1 ? 's' : ''}`
+    if (archive && !confirm(`Archive ${n}? They'll be hidden from lists, the dashboard and the contractor portal. You can restore them from the "Archived" view.`)) return
+    setArchiving(true)
+    const archived_at = archive ? new Date().toISOString() : null
+    const { error } = await supabase.from('maintenance_items').update({ archived_at }).in('id', ids)
+    if (error) {
+      alert(`Couldn't ${archive ? 'archive' : 'restore'} items: ${error.message}`)
+    } else {
+      await supabase.from('activity_log').insert(ids.map(id => ({
+        maintenance_item_id: id, action: archive ? 'item_archived' : 'item_restored', details: {}, performed_by: 'admin',
+      })))
+      const set = new Set(ids)
+      setItems(prev => prev.map(i => set.has(i.id) ? { ...i, archived_at } : i))
+      setSelected(new Set())
+      router.refresh()
+    }
+    setArchiving(false)
+  }
+
   const unitsForProject = useMemo(() => {
     if (!filterProject) return []
     const seen = new Set<string>()
@@ -121,10 +144,15 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     }
     if (filterProject) result = result.filter(i => (i.unit as any)?.project?.id === filterProject)
     if (filterUnit) result = result.filter(i => (i.unit as any)?.id === filterUnit)
-    // No status chosen = all open items; completed items only show when "Complete" is picked
-    result = filterStatus
-      ? result.filter(i => i.status === filterStatus)
-      : result.filter(i => i.status !== 'complete')
+    // No status chosen = all open items; completed items only show when "Complete" is picked.
+    // Archived items only show in the "Archived" view.
+    if (filterStatus === 'archived') result = result.filter(i => i.archived_at)
+    else {
+      result = result.filter(i => !i.archived_at)
+      result = filterStatus
+        ? result.filter(i => i.status === filterStatus)
+        : result.filter(i => i.status !== 'complete')
+    }
     if (filterContractor === 'none') result = result.filter(i => !(i.contractor_id ?? (i.contractor as any)?.id))
     else if (filterContractor) result = result.filter(i => (i.contractor_id ?? (i.contractor as any)?.id) === filterContractor)
     if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
@@ -137,9 +165,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     return result
   }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, filterAssignee, currentUserId, sortBy])
 
-  // Only act on selected items that are still visible and not already complete
-  const selectable = filtered.filter(i => i.status !== 'complete')
+  // Only act on selected items that are still visible. Complete items can be selected (to archive them)
+  // but "Mark complete" only applies to the ones that aren't complete yet.
+  const viewingArchived = filterStatus === 'archived'
+  const selectable = filtered
   const selectedVisible = selectable.filter(i => selected.has(i.id)).map(i => i.id)
+  const selectedOpen = selectable.filter(i => selected.has(i.id) && i.status !== 'complete').map(i => i.id)
   const allSelected = selectable.length > 0 && selectedVisible.length === selectable.length
 
   function toggleAll() {
@@ -223,6 +254,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           {(['logged','assigned','in_progress','contractor_complete','complete'] as MaintenanceStatus[]).map(s => (
             <option key={s} value={s}>{s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
           ))}
+          <option value="archived">Archived</option>
         </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterContractor} onChange={e => setFilterContractor(e.target.value)}>
           <option value="">All Contractors</option>
@@ -297,12 +329,23 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             </>
           )}
           <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: '#d3e5f8', margin: '0 4px' }} />
+          {!viewingArchived && selectedOpen.length > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => markSelectedComplete(selectedOpen)}
+              disabled={completing}
+            >
+              <CheckCheck size={15} /> {completing ? 'Marking complete…' : `Mark ${selectedOpen.length} complete`}
+            </button>
+          )}
           <button
             className="btn btn-secondary"
-            onClick={() => markSelectedComplete(selectedVisible)}
-            disabled={completing}
+            onClick={() => setArchived(selectedVisible, !viewingArchived)}
+            disabled={archiving}
           >
-            <CheckCheck size={15} /> {completing ? 'Marking complete…' : `Mark ${selectedVisible.length} complete`}
+            {viewingArchived
+              ? <><ArchiveRestore size={15} /> {archiving ? 'Restoring…' : `Restore ${selectedVisible.length}`}</>
+              : <><Archive size={15} /> {archiving ? 'Archiving…' : `Archive ${selectedVisible.length}`}</>}
           </button>
         </div>
       )}
@@ -331,7 +374,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                 <th style={{ width: 1 }}>
                   <input
                     type="checkbox"
-                    aria-label="Select all open items"
+                    aria-label="Select all items"
                     checked={allSelected}
                     ref={el => { if (el) el.indeterminate = selectedVisible.length > 0 && !allSelected }}
                     onChange={toggleAll}
@@ -353,15 +396,13 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                 return (
                   <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : undefined}>
                     <td style={{ width: 1 }}>
-                      {item.status !== 'complete' && (
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${item.item_number}`}
-                          checked={selected.has(item.id)}
-                          onChange={() => toggleSelected(item.id)}
-                          style={checkboxStyle}
-                        />
-                      )}
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${item.item_number}`}
+                        checked={selected.has(item.id)}
+                        onChange={() => toggleSelected(item.id)}
+                        style={checkboxStyle}
+                      />
                     </td>
                     <td style={{ color: '#787774', fontSize: 13, whiteSpace: 'nowrap' }}>{item.item_number}</td>
                     <td style={{ maxWidth: 240 }}>

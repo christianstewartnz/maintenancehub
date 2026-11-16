@@ -13,7 +13,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes, updatesRes, usersRes, { data: { user } }] = await Promise.all([
     supabase.from('maintenance_items').select(`
       id, item_number, title, description, status, created_at, updated_at, completed_at,
-      contractor_id, trade_id, unit_id, assigned_to, scheduled_date,
+      contractor_id, trade_id, unit_id, assigned_to, scheduled_date, archived_at,
       unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, settlement_date, owners:unit_owners(id, name, email, phone), project:projects(id, name)),
       trade:trades(id, name),
       contractor:contractors(id, company_name, contact_name, email, phone),

@@ -189,6 +189,7 @@ server.tool(
       .from('maintenance_items')
       .select('status, created_at')
       .in('unit_id', unitIds)
+      .is('archived_at', null)
 
     if (!items?.length) return { content: [{ type: 'text', text: `${proj.name} — no maintenance items.` }] }
 
@@ -542,6 +543,7 @@ server.tool(
       .from('maintenance_items')
       .select('item_number, title, status, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', c.id)
+      .is('archived_at', null)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
 
@@ -663,6 +665,7 @@ server.tool(
       .from('maintenance_items')
       .select('item_number, title, status, created_at, unit:units(unit_identifier, address)')
       .in('unit_id', unitIds)
+      .is('archived_at', null)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
 
@@ -689,14 +692,16 @@ server.tool(
     status: z.enum(['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete', 'all']).optional(),
     project: z.string().optional().describe('Project name (partial) or project ID'),
     limit: z.number().min(1).max(100).optional().describe('Max results (default 20)'),
+    archived: z.boolean().optional().describe('true to list only archived items (default: archived items are excluded)'),
   },
-  async ({ status, project, limit = 20 }) => {
+  async ({ status, project, limit = 20, archived = false }) => {
     let query = supabase
       .from('maintenance_items')
       .select('item_number, title, status, created_at, unit:units(unit_identifier, address, project:projects(name))')
       .order('created_at', { ascending: false })
       .limit(limit)
 
+    query = archived ? query.not('archived_at', 'is', null) : query.is('archived_at', null)
     if (status && status !== 'all') query = query.eq('status', status)
 
     if (project) {
@@ -716,6 +721,26 @@ server.tool(
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No items found.' }] }
+  },
+)
+
+server.tool(
+  'archive_maintenance_item',
+  'Archive or restore a maintenance item. Archived items keep their history but are hidden from lists, counts, sign-off and the contractor portal.',
+  {
+    item_number: z.string().describe('Item number e.g. MI-0001'),
+    archive: z.boolean().describe('true to archive, false to restore'),
+  },
+  async ({ item_number, archive }) => {
+    const item = await resolveItemByNumber(item_number)
+    if (!item) return { content: [{ type: 'text', text: `Item "${item_number}" not found.` }] }
+    const { error } = await supabase
+      .from('maintenance_items')
+      .update({ archived_at: archive ? new Date().toISOString() : null })
+      .eq('id', item.id)
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    await logActivity(item.id, archive ? 'item_archived' : 'item_restored')
+    return { content: [{ type: 'text', text: `${item.item_number} — ${item.title} ${archive ? 'archived' : 'restored'}.` }] }
   },
 )
 
@@ -754,7 +779,7 @@ server.tool(
     const u = item.unit as any
     const lines = [
       `[${item.item_number}] ${item.title}`,
-      `Status: ${item.status}`,
+      `Status: ${item.status}${item.archived_at ? ` (ARCHIVED ${new Date(item.archived_at).toLocaleDateString('en-NZ')})` : ''}`,
       `Project: ${(u?.project as any)?.name ?? '—'}`,
       `Unit: ${unitLabel(u)} | Lot ${u?.lot_number ?? '—'}`,
       `Construction No.: ${u?.unit_identifier ?? '—'}`,
@@ -984,6 +1009,7 @@ server.tool(
       .from('maintenance_items')
       .select('item_number, title, status, created_at, unit:units(unit_identifier, address, project:projects(name))')
       .in('status', ['logged', 'assigned', 'in_progress'])
+      .is('archived_at', null)
       .lt('created_at', cutoff)
       .order('created_at')
 
@@ -1018,6 +1044,7 @@ server.tool(
         contractor:contractors(company_name)
       `)
       .eq('status', 'contractor_complete')
+      .is('archived_at', null)
       .order('updated_at')
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }

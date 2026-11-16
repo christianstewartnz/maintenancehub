@@ -17,11 +17,12 @@ export default async function ContractorDetailPage({ params }: { params: Promise
     supabase.from('maintenance_items').select(`
       id, item_number, title, status, created_at, contractor_notified_at,
       unit:units(id, unit_identifier, address, project:projects(id, name))
-    `).eq('contractor_id', id).order('created_at', { ascending: false }).limit(100),
+    `).eq('contractor_id', id).is('archived_at', null).order('created_at', { ascending: false }).limit(100),
     supabase.from('maintenance_items')
       .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', id)
       .is('contractor_notified_at', null)
+      .is('archived_at', null)
       .not('status', 'in', NOT_PENDING_FILTER)
       .order('created_at'),
     supabase.from('maintenance_items')

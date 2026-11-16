@@ -46,12 +46,14 @@ export default function Sidebar() {
         supabase
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'contractor_complete'),
+          .eq('status', 'contractor_complete')
+          .is('archived_at', null),
         supabase
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
           .not('contractor_id', 'is', null)
           .is('contractor_notified_at', null)
+          .is('archived_at', null)
           .not('status', 'in', NOT_PENDING_FILTER),
       ])
       setSignOffCount(count ?? 0)

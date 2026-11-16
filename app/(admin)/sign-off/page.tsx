@@ -16,6 +16,7 @@ export default async function SignOffPage() {
         contractor:contractors(id, company_name, contact_name, email)
       `)
       .eq('status', 'contractor_complete')
+      .is('archived_at', null)
       .order('updated_at', { ascending: true }),
     supabase.from('projects').select('id, name').eq('status', 'active').order('name'),
     supabase.from('contractors').select('id, company_name').order('company_name'),

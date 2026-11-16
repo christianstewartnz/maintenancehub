@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile } from '@/lib/types'
 import { profileName } from '@/lib/assignees'
-import { Pencil, Mail, CheckCircle2, RotateCcw } from 'lucide-react'
+import { Pencil, Mail, CheckCircle2, RotateCcw, Archive, ArchiveRestore } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, type PhotoWithUrl } from '@/lib/photos'
 import type { PhotoType } from '@/lib/types'
@@ -38,6 +38,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const [scheduledDate, setScheduledDate] = useState(item.scheduled_date ?? '')
   const [savingDate, setSavingDate] = useState(false)
   const [savingAssignee, setSavingAssignee] = useState(false)
+  const [archiving, setArchiving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -109,6 +110,23 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       }, ...prev])
     }
     setSavingAssignee(false)
+  }
+
+  async function toggleArchive() {
+    const archive = !item.archived_at
+    if (archive && !confirm(`Archive ${item.item_number}? It will be hidden from lists, the dashboard and the contractor portal. You can restore it later.`)) return
+    setArchiving(true)
+    const archived_at = archive ? new Date().toISOString() : null
+    const { error } = await supabase.from('maintenance_items').update({ archived_at }).eq('id', item.id)
+    if (error) {
+      alert(`Couldn't ${archive ? 'archive' : 'restore'} item: ${error.message}`)
+    } else {
+      setItem(prev => ({ ...prev, archived_at }))
+      const me = users.find(u => u.id === currentUserId)
+      logActivity(archive ? 'item_archived' : 'item_restored', {}, me ? profileName(me) : 'admin')
+      router.refresh()
+    }
+    setArchiving(false)
   }
 
   function logActivity(action: string, details: Record<string, unknown>, performedBy: string) {
@@ -201,6 +219,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
             <StatusBadge status={item.status} />
+            {item.archived_at && <span style={archivedPillStyle}>Archived</span>}
             <button
               className="btn btn-ghost"
               style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 13, color: '#787774', display: 'flex', alignItems: 'center', gap: 5 }}
@@ -208,7 +227,22 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             >
               <Pencil size={13} /> Edit
             </button>
+            <button
+              className="btn btn-ghost"
+              style={{ padding: '4px 8px', fontSize: 13, color: '#787774', display: 'flex', alignItems: 'center', gap: 5 }}
+              onClick={toggleArchive}
+              disabled={archiving}
+            >
+              {item.archived_at
+                ? <><ArchiveRestore size={13} /> {archiving ? 'Restoring…' : 'Restore'}</>
+                : <><Archive size={13} /> {archiving ? 'Archiving…' : 'Archive'}</>}
+            </button>
           </div>
+          {item.archived_at && (
+            <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#787774' }}>
+              Archived {formatDateTime(item.archived_at)} — hidden from lists, the dashboard, sign-off and the contractor portal.
+            </div>
+          )}
           <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px', color: '#37352f' }}>{item.title}</h2>
           {item.description && <p style={{ color: '#37352f', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{item.description}</p>}
         </div>
@@ -529,9 +563,13 @@ function formatActivityLog(log: ActivityLog): string {
     case 'photo_added': return d?.photo_type === 'before' ? 'added an inspection photo'
       : d?.photo_type === 'after' ? 'added a completion photo'
       : 'added a photo'
+    case 'item_archived': return 'archived item'
+    case 'item_restored': return 'restored item from archive'
     case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
     default: return log.action.replace(/_/g, ' ')
   }
 }
+
+const archivedPillStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#787774', background: '#f1f1ef', border: '1px solid #e9e9e7', borderRadius: 4, padding: '2px 8px' }
 
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5, color: '#37352f' }
