@@ -53,7 +53,8 @@ export async function GET(request: Request) {
   // Matches the page: no status filter means all open (non-complete) items
   if (status && STATUSES.includes(status as MaintenanceStatus)) query = query.eq('status', status)
   else query = query.neq('status', 'complete')
-  if (contractorId) query = query.eq('contractor_id', contractorId)
+  if (contractorId === 'none') query = query.is('contractor_id', null)
+  else if (contractorId) query = query.eq('contractor_id', contractorId)
 
   let assigneeLabel: string | null = null
   if (assignee === ASSIGNEE_ME) {

@@ -109,7 +109,8 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
     }
     if (filterProject) result = result.filter(i => i.unit?.project?.id === filterProject)
     if (filterUnit) result = result.filter(i => i.unit?.id === filterUnit)
-    if (filterContractor) result = result.filter(i => (i.contractor_id ?? i.contractor?.id) === filterContractor)
+    if (filterContractor === 'none') result = result.filter(i => !(i.contractor_id ?? i.contractor?.id))
+    else if (filterContractor) result = result.filter(i => (i.contractor_id ?? i.contractor?.id) === filterContractor)
     if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
     return result
   }, [queue, search, filterProject, filterUnit, filterContractor, filterAssignee, currentUserId])
@@ -240,6 +241,7 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
           )}
           <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterContractor} onChange={e => setFilterContractor(e.target.value)} aria-label="Filter by contractor">
             <option value="">All Contractors</option>
+            <option value="none">No contractor</option>
             {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
           {hasFilters && (
