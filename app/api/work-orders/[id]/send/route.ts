@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateWorkOrderPDF } from '@/lib/generate-pdf'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 
 export async function POST(
   _req: Request,
@@ -34,8 +34,8 @@ export async function POST(
     return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    return Response.json({ error: 'Email sending is not configured (missing RESEND_API_KEY)' }, { status: 500 })
+  if (!isEmailConfigured()) {
+    return Response.json({ error: 'Email sending is not configured (set SMTP_HOST or RESEND_API_KEY)' }, { status: 500 })
   }
 
   // Generate PDF
@@ -102,11 +102,8 @@ export async function POST(
     </div>
   `
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'Maintenance Hub <noreply@maintenancehub.co.nz>'
-
-  const { error: emailError } = await resend.emails.send({
-    from: fromEmail,
+  const { error: emailError } = await sendEmail({
+    replyTo: user.email,
     to: contractor.email,
     subject: `Work Order ${workOrder.work_order_number} — ${project?.name ?? ''}`,
     html,
@@ -119,7 +116,7 @@ export async function POST(
   })
 
   if (emailError) {
-    return Response.json({ error: emailError.message }, { status: 500 })
+    return Response.json({ error: emailError }, { status: 500 })
   }
 
   await supabase

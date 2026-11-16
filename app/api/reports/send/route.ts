@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { reportEmail } from '@/lib/email-templates'
 
 // Called by Vercel cron or manually: POST /api/reports/send
@@ -10,8 +10,8 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!process.env.RESEND_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: 'Missing RESEND_API_KEY or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
+  if (!isEmailConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return Response.json({ error: 'Missing email settings (SMTP_HOST or RESEND_API_KEY) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
   }
 
   const serviceSupabase = createClient(
@@ -29,8 +29,6 @@ export async function POST(req: Request) {
 
   const now = new Date()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const from = process.env.RESEND_FROM_EMAIL ?? 'Maintenance Hub <noreply@maintenancehub.co.nz>'
 
   let sent = 0
 
@@ -113,7 +111,7 @@ export async function POST(req: Request) {
       appUrl,
     })
 
-    await resend.emails.send({ from, to: user.email, subject, html })
+    await sendEmail({ to: user.email, subject, html })
     sent++
   }
 

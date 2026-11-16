@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCommentEmail } from '@/lib/email-templates'
 
 export async function POST(
@@ -24,7 +24,7 @@ export async function POST(
   if (error) return Response.json({ error: error.message }, { status: 400 })
 
   // Send notification email if enabled
-  if (process.env.RESEND_API_KEY) {
+  if (isEmailConfigured()) {
     try {
       await sendCommentNotification(token, item_id, author, content)
     } catch {
@@ -81,7 +81,5 @@ async function sendCommentNotification(
     itemId: item.id,
   })
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const from = process.env.RESEND_FROM_EMAIL ?? 'Maintenance Hub <noreply@maintenancehub.co.nz>'
-  await resend.emails.send({ from, to: user.email, subject, html })
+  await sendEmail({ to: user.email, subject, html })
 }

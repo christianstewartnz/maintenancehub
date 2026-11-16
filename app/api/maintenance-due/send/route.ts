@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { maintenanceDueEmail } from '@/lib/email-templates'
 
 // Called daily by Vercel cron: POST /api/maintenance-due/send
@@ -10,8 +10,8 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!process.env.RESEND_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: 'Missing RESEND_API_KEY or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
+  if (!isEmailConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return Response.json({ error: 'Missing email settings (SMTP_HOST or RESEND_API_KEY) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
   }
 
   const serviceSupabase = createClient(
@@ -83,11 +83,9 @@ export async function POST(req: Request) {
   if (!adminEmail) return Response.json({ error: 'Could not determine admin email' }, { status: 500 })
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const from = process.env.RESEND_FROM_EMAIL ?? 'Maintenance Hub <noreply@maintenancehub.co.nz>'
 
   const { subject, html } = maintenanceDueEmail({ upcomingUnits, overdueUnits, appUrl })
-  await resend.emails.send({ from, to: adminEmail, subject, html })
+  await sendEmail({ to: adminEmail, subject, html })
 
   return Response.json({ sent: true, upcoming: upcomingUnits.length, overdue: overdueUnits.length })
 }

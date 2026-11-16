@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { Resend } from 'resend'
+import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorNewItemsEmail } from '@/lib/email-templates'
 import { NOT_PENDING_FILTER } from '@/lib/contractor-notify'
 
@@ -61,8 +61,8 @@ export async function POST(
     if (!contractor.email) {
       return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
     }
-    if (!process.env.RESEND_API_KEY) {
-      return Response.json({ error: 'Email sending is not configured (missing RESEND_API_KEY)' }, { status: 500 })
+    if (!isEmailConfigured()) {
+      return Response.json({ error: 'Email sending is not configured (set SMTP_HOST or RESEND_API_KEY)' }, { status: 500 })
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -81,22 +81,10 @@ export async function POST(
       })),
     })
 
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    // Always show "Stratum Maintenance Hub" as the sender name; the address still comes from RESEND_FROM_EMAIL.
-    const configuredFrom = process.env.RESEND_FROM_EMAIL ?? 'noreply@maintenancehub.co.nz'
-    const fromAddress = configuredFrom.match(/<([^>]+)>/)?.[1] ?? configuredFrom.trim()
-    const fromEmail = `Stratum Maintenance Hub <${fromAddress}>`
     // Replies go to whoever clicked Notify; RESEND_REPLY_TO is a fallback for users without an email.
     const replyTo = user.email ?? process.env.RESEND_REPLY_TO
-    const { error: emailError } = await resend.emails.send({
-      from: fromEmail,
-      to: contractor.email,
-      ...(replyTo ? { replyTo } : {}),
-      subject,
-      html,
-      text,
-    })
-    if (emailError) return Response.json({ error: emailError.message }, { status: 500 })
+    const { error: emailError } = await sendEmail({ to: contractor.email, replyTo, subject, html, text })
+    if (emailError) return Response.json({ error: emailError }, { status: 500 })
   }
 
   const now = new Date().toISOString()
