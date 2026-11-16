@@ -20,10 +20,33 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
   const [pending, setPending] = useState(initialPending)
   const [notifying, setNotifying] = useState<Contractor | null>(null)
   const [showNotifyAll, setShowNotifyAll] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const pendingFor = (id: string) => pending.filter(p => p.contractor_id === id)
   const pendingCounts: Record<string, number> = {}
   for (const p of pending) pendingCounts[p.contractor_id] = (pendingCounts[p.contractor_id] ?? 0) + 1
+
+  // Only contractors with new items and an email address can be bulk-notified.
+  const canSelect = (c: Contractor) => !!pendingCounts[c.id] && !!c.email
+  const selectedContractors = contractors.filter(c => selected.has(c.id) && canSelect(c))
+  function toggleSelect(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function setSelectedMany(ids: string[], on: boolean) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }
 
   function clearPending(ids: string[]) {
     const set = new Set(ids)
@@ -99,8 +122,13 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
     <div style={{ padding: '24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         {pending.length > 0 && (
-          <button className="btn btn-secondary" onClick={() => setShowNotifyAll(true)}>
-            <Mail size={15} /> Notify all ({Object.keys(pendingCounts).length})
+          <button
+            className={selectedContractors.length ? 'btn btn-primary' : 'btn btn-secondary'}
+            onClick={() => setShowNotifyAll(true)}
+            disabled={selectedContractors.length === 0}
+            title={selectedContractors.length ? undefined : 'Tick the contractors you want to email'}
+          >
+            <Mail size={15} /> Notify selected ({selectedContractors.length})
           </button>
         )}
         <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={16} /> New Contractor</button>
@@ -121,6 +149,10 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
             onEdit={openEdit}
             pendingCounts={pendingCounts}
             onNotify={setNotifying}
+            selected={selected}
+            canSelect={canSelect}
+            onToggle={toggleSelect}
+            onToggleMany={setSelectedMany}
           />
           {contractors.some(c => c.is_active === false) && (
             <div style={{ marginTop: 24 }}>
@@ -142,6 +174,10 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
                     onEdit={openEdit}
                     pendingCounts={pendingCounts}
                     onNotify={setNotifying}
+                    selected={selected}
+                    canSelect={canSelect}
+                    onToggle={toggleSelect}
+                    onToggleMany={setSelectedMany}
                     dimmed
                   />
                 </div>
@@ -162,10 +198,10 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
 
       {showNotifyAll && (
         <NotifyAllModal
-          contractors={contractors.filter(c => pendingCounts[c.id])}
+          contractors={selectedContractors}
           pendingFor={pendingFor}
           onClose={() => setShowNotifyAll(false)}
-          onSent={clearPending}
+          onSent={(ids, contractorId) => { clearPending(ids); setSelectedMany([contractorId], false) }}
         />
       )}
 
@@ -235,13 +271,14 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
   contractors: Contractor[]
   pendingFor: (id: string) => PendingRow[]
   onClose: () => void
-  onSent: (ids: string[]) => void
+  onSent: (ids: string[], contractorId: string) => void
 }) {
+  // Freeze the list when the dialog opens, so rows stay visible as each one is sent.
+  const [list] = useState(contractors)
   type Result = 'sent' | 'skipped' | string
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState<Record<string, Result>>({})
-  const sendable = contractors.filter(c => c.email)
-  const noEmail = contractors.filter(c => !c.email)
+  const sendable = list.filter(c => c.email)
   const done = Object.keys(results).length > 0 && !running
 
   async function sendAll() {
@@ -255,7 +292,7 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
       })
       const json = await res.json().catch(() => ({}))
       if (res.ok) {
-        onSent(ids)
+        onSent(ids, c.id)
         window.dispatchEvent(new Event(COUNTS_CHANGED_EVENT))
       }
       setResults(prev => ({ ...prev, [c.id]: res.ok ? 'sent' : (json.error ?? 'Failed') }))
@@ -267,7 +304,7 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
     <div className="modal-overlay" onClick={() => !running && onClose()}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
         <div className="modal-header">
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Notify all contractors</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Notify selected contractors</h2>
           <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={onClose} disabled={running}>✕</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -277,7 +314,7 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
           <table className="data-table" style={{ marginBottom: 0 }}>
             <thead><tr><th>Contractor</th><th>Email</th><th style={{ textAlign: 'right' }}>New</th><th></th></tr></thead>
             <tbody>
-              {contractors.map(c => {
+              {list.map(c => {
                 const r = results[c.id]
                 return (
                   <tr key={c.id} style={{ opacity: c.email ? 1 : 0.55 }}>
@@ -293,14 +330,9 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
               })}
             </tbody>
           </table>
-          {noEmail.length > 0 && (
-            <p style={{ margin: 0, fontSize: 13, color: '#787774' }}>
-              {noEmail.length} contractor{noEmail.length !== 1 ? 's have' : ' has'} no email address and will be skipped.
-            </p>
-          )}
           {Object.values(results).some(r => r !== 'sent') && (
             <p style={{ margin: 0, fontSize: 13, color: '#e03131' }}>
-              {Object.entries(results).filter(([, r]) => r !== 'sent').map(([id, r]) => `${contractors.find(c => c.id === id)?.company_name}: ${r}`).join(' · ')}
+              {Object.entries(results).filter(([, r]) => r !== 'sent').map(([id, r]) => `${list.find(c => c.id === id)?.company_name}: ${r}`).join(' · ')}
             </p>
           )}
         </div>
@@ -321,23 +353,53 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
   )
 }
 
-function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts, onNotify, dimmed }: {
+function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts, onNotify, selected, canSelect, onToggle, onToggleMany, dimmed }: {
   contractors: Contractor[]
   copiedId: string | null
   onCopy: (c: Contractor) => void
   onEdit: (c: Contractor) => void
   pendingCounts: Record<string, number>
   onNotify: (c: Contractor) => void
+  selected: Set<string>
+  canSelect: (c: Contractor) => boolean
+  onToggle: (id: string) => void
+  onToggleMany: (ids: string[], on: boolean) => void
   dimmed?: boolean
 }) {
+  const selectable = contractors.filter(canSelect).map(c => c.id)
+  const allOn = selectable.length > 0 && selectable.every(id => selected.has(id))
+  const someOn = selectable.some(id => selected.has(id))
   return (
     <table className="data-table" style={{ opacity: dimmed ? 0.6 : 1 }}>
       <thead>
-        <tr><th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>New items</th><th>Portal</th><th></th></tr>
+        <tr>
+          <th style={{ width: 32 }}>
+            <input
+              type="checkbox"
+              aria-label="Select all contractors with new items"
+              title={selectable.length ? 'Select all contractors with new items' : 'No contractors with new items'}
+              disabled={selectable.length === 0}
+              checked={allOn}
+              ref={el => { if (el) el.indeterminate = someOn && !allOn }}
+              onChange={() => onToggleMany(selectable, !allOn)}
+            />
+          </th>
+          <th>Company</th><th>Contact</th><th>Email</th><th>Phone</th><th>New items</th><th>Portal</th><th></th>
+        </tr>
       </thead>
       <tbody>
         {contractors.map(c => (
           <tr key={c.id}>
+            <td>
+              <input
+                type="checkbox"
+                aria-label={`Select ${c.company_name}`}
+                disabled={!canSelect(c)}
+                title={!pendingCounts[c.id] ? 'No new items' : !c.email ? 'No email address on file' : undefined}
+                checked={canSelect(c) && selected.has(c.id)}
+                onChange={() => onToggle(c.id)}
+              />
+            </td>
             <td>
               <Link href={`/contractors/${c.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>
                 {c.company_name}
