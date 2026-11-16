@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getDaysSince, formatDateTime, formatUnitLabel } from '@/lib/utils'
 import { CheckCheck, RotateCcw, MessageSquare, Clock, Search, X } from 'lucide-react'
 import type { Profile } from '@/lib/types'
+import { useSessionState } from '@/lib/useSessionState'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
 
 // Shared with the Maintenance page so each person's assignee choice carries across both
@@ -36,10 +37,10 @@ interface Props {
 
 export default function SignOffClient({ items: allItems, projects, contractors, users, currentUserId }: Props) {
   const [queue, setQueue] = useState(allItems)
-  const [search, setSearch] = useState('')
-  const [filterProject, setFilterProject] = useState('')
-  const [filterUnit, setFilterUnit] = useState('')
-  const [filterContractor, setFilterContractor] = useState('')
+  const [search, setSearch] = useSessionState('signoff.search', '')
+  const [filterProject, setFilterProject] = useSessionState('signoff.project', '')
+  const [filterUnit, setFilterUnit] = useSessionState('signoff.unit', '')
+  const [filterContractor, setFilterContractor] = useSessionState('signoff.contractor', '')
   const [filterAssignee, setFilterAssignee] = useState('')
   const [confirming, setConfirming] = useState<Set<string>>(new Set())
   const [sendingBack, setSendingBack] = useState<Set<string>>(new Set())

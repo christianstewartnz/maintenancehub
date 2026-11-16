@@ -1,13 +1,18 @@
+import BackButton from './BackButton'
+
 interface PageHeaderProps {
   title: string
   description?: string
   actions?: React.ReactNode
   breadcrumbs?: { label: string; href?: string }[]
+  /** Shows a Back button; this is where it goes if there's no earlier page to return to */
+  backHref?: string
 }
 
-export default function PageHeader({ title, description, actions, breadcrumbs }: PageHeaderProps) {
+export default function PageHeader({ title, description, actions, breadcrumbs, backHref }: PageHeaderProps) {
   return (
     <div className="page-header" style={{ borderBottom: '1px solid #e9e9e7', marginBottom: 0 }}>
+      {backHref && <BackButton fallbackHref={backHref} />}
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav style={{ display: 'flex', gap: 6, fontSize: 13, color: '#787774', marginBottom: 8 }}>
           {breadcrumbs.map((crumb, i) => (

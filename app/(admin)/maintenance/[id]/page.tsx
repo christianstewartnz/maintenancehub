@@ -40,6 +40,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   return (
     <div>
       <PageHeader
+        backHref="/maintenance"
         title={itemRes.data.item_number}
         description={itemRes.data.title}
         breadcrumbs={[

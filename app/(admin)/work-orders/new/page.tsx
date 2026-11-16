@@ -14,7 +14,8 @@ export default async function NewWorkOrderPage() {
 
   return (
     <div>
-      <PageHeader title="New Work Order" description="Select items to group and send to a contractor" />
+      <PageHeader
+        backHref="/work-orders" title="New Work Order" description="Select items to group and send to a contractor" />
       <NewWorkOrderClient
         projects={projects ?? []}
         contractors={contractors ?? []}

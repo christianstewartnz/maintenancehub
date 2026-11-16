@@ -23,6 +23,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   return (
     <div>
       <PageHeader
+        backHref="/projects"
         title={projectRes.data.name}
         description={projectRes.data.address ?? undefined}
         breadcrumbs={[{ label: 'Projects', href: '/projects' }, { label: projectRes.data.name }]}

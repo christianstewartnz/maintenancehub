@@ -27,6 +27,7 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
   return (
     <div>
       <PageHeader
+        backHref="/work-orders"
         title={workOrder.work_order_number}
         description={`${(workOrder.project as any)?.name} — ${(workOrder.contractor as any)?.company_name}`}
       />

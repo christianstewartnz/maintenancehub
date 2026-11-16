@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
 import type { MaintenanceItem, MaintenanceStatus, Profile } from '@/lib/types'
+import { useSessionState } from '@/lib/useSessionState'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
 
 const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
@@ -25,16 +26,16 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [items, setItems] = useState(initial)
   const [showCreate, setShowCreate] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [search, setSearch] = useState('')
-  const [filterProject, setFilterProject] = useState('')
-  const [filterUnit, setFilterUnit] = useState('')
+  const [search, setSearch] = useSessionState('maintenance.search', '')
+  const [filterProject, setFilterProject] = useSessionState('maintenance.project', '')
+  const [filterUnit, setFilterUnit] = useSessionState('maintenance.unit', '')
   // 'archived' is a pseudo-status: shows archived items only (any real status)
-  const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | 'archived' | ''>('')
-  const [filterContractor, setFilterContractor] = useState('')
+  const [filterStatus, setFilterStatus] = useSessionState<MaintenanceStatus | 'archived' | ''>('maintenance.status', '')
+  const [filterContractor, setFilterContractor] = useSessionState('maintenance.contractor', '')
   const [filterAssignee, setFilterAssignee] = useState('')
   const [assigning, setAssigning] = useState(false)
   const [bulkAssignee, setBulkAssignee] = useState('')
-  const [sortBy, setSortBy] = useState<'created_at' | 'status'>('created_at')
+  const [sortBy, setSortBy] = useSessionState<'created_at' | 'status'>('maintenance.sort', 'created_at')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [completing, setCompleting] = useState(false)
   const [archiving, setArchiving] = useState(false)
