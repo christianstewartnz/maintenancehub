@@ -4,16 +4,23 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getDaysSince, formatDateTime } from '@/lib/utils'
-import { CheckCheck, RotateCcw, MessageSquare, Clock } from 'lucide-react'
+import { getDaysSince, formatDateTime, formatUnitLabel } from '@/lib/utils'
+import { CheckCheck, RotateCcw, MessageSquare, Clock, Search, X } from 'lucide-react'
+import type { Profile } from '@/lib/types'
+import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
+
+// Shared with the Maintenance page so each person's assignee choice carries across both
+const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
 
 interface Item {
   id: string
   item_number: string
   title: string
+  description: string | null
   created_at: string
   updated_at: string
   contractor_id: string | null
+  assigned_to: string | null
   unit: any
   contractor: any
   lastComment: { author: string; content: string; created_at: string } | null
@@ -21,10 +28,19 @@ interface Item {
 
 interface Props {
   items: Item[]
+  projects: { id: string; name: string }[]
+  contractors: { id: string; company_name: string }[]
+  users: Profile[]
+  currentUserId: string
 }
 
-export default function SignOffClient({ items: initial }: Props) {
-  const [items, setItems] = useState(initial)
+export default function SignOffClient({ items: allItems, projects, contractors, users, currentUserId }: Props) {
+  const [queue, setQueue] = useState(allItems)
+  const [search, setSearch] = useState('')
+  const [filterProject, setFilterProject] = useState('')
+  const [filterUnit, setFilterUnit] = useState('')
+  const [filterContractor, setFilterContractor] = useState('')
+  const [filterAssignee, setFilterAssignee] = useState('')
   const [confirming, setConfirming] = useState<Set<string>>(new Set())
   const [sendingBack, setSendingBack] = useState<Set<string>>(new Set())
   const [sendBackNotes, setSendBackNotes] = useState<Record<string, string>>({})
@@ -49,6 +65,60 @@ export default function SignOffClient({ items: initial }: Props) {
 
     return () => { supabase.removeChannel(channel) }
   }, [])
+
+  // Restore the assignee filter after hydration so server and client render the same HTML
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(ASSIGNEE_FILTER_KEY)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage after hydration
+      if (saved && (saved === ASSIGNEE_ME || saved === ASSIGNEE_UNASSIGNED || users.some(u => u.id === saved))) setFilterAssignee(saved)
+    } catch {}
+  }, [users])
+
+  function changeAssigneeFilter(value: string) {
+    setFilterAssignee(value)
+    try {
+      if (value) localStorage.setItem(ASSIGNEE_FILTER_KEY, value)
+      else localStorage.removeItem(ASSIGNEE_FILTER_KEY)
+    } catch {}
+  }
+
+  const userLabel = (u: Profile) => `${profileName(u)}${u.id === currentUserId ? ' (me)' : ''}`
+
+  const unitsForProject = useMemo(() => {
+    if (!filterProject) return []
+    const seen = new Set<string>()
+    const result: { id: string; label: string }[] = []
+    for (const item of queue) {
+      const unit = item.unit as any
+      if (unit?.id && unit?.project?.id === filterProject && !seen.has(unit.id)) {
+        seen.add(unit.id)
+        result.push({ id: unit.id, label: formatUnitLabel(unit, 'Unnamed unit') })
+      }
+    }
+    return result.sort((a, b) => a.label.localeCompare(b.label))
+  }, [queue, filterProject])
+
+  // The visible items — everything below (counts, Confirm All, groups) works on this list
+  const items = useMemo(() => {
+    let result = queue
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(i => i.title?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q) || i.item_number?.toLowerCase().includes(q)
+        || i.unit?.unit_identifier?.toLowerCase().includes(q) || i.unit?.address?.toLowerCase().includes(q))
+    }
+    if (filterProject) result = result.filter(i => i.unit?.project?.id === filterProject)
+    if (filterUnit) result = result.filter(i => i.unit?.id === filterUnit)
+    if (filterContractor) result = result.filter(i => (i.contractor_id ?? i.contractor?.id) === filterContractor)
+    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
+    return result
+  }, [queue, search, filterProject, filterUnit, filterContractor, filterAssignee, currentUserId])
+
+  const hasFilters = !!(search || filterProject || filterUnit || filterContractor || filterAssignee)
+
+  function clearFilters() {
+    setSearch(''); setFilterProject(''); setFilterUnit(''); setFilterContractor(''); changeAssigneeFilter('')
+  }
 
   // Group items by project → unit
   const groups = useMemo(() => {
@@ -81,7 +151,7 @@ export default function SignOffClient({ items: initial }: Props) {
       details: { from: 'contractor_complete', to: 'complete' },
       performed_by: 'admin',
     })
-    setItems(prev => prev.filter(i => i.id !== itemId))
+    setQueue(prev => prev.filter(i => i.id !== itemId))
     setConfirming(prev => { const s = new Set(prev); s.delete(itemId); return s })
   }
 
@@ -105,7 +175,7 @@ export default function SignOffClient({ items: initial }: Props) {
         content: note,
       })
     }
-    setItems(prev => prev.filter(i => i.id !== itemId))
+    setQueue(prev => prev.filter(i => i.id !== itemId))
     setSendingBack(prev => { const s = new Set(prev); s.delete(itemId); return s })
   }
 
@@ -124,7 +194,8 @@ export default function SignOffClient({ items: initial }: Props) {
       performed_by: 'admin',
     }))
     await supabase.from('activity_log').insert(logs)
-    setItems([])
+    const done = new Set(ids)
+    setQueue(prev => prev.filter(i => !done.has(i.id)))
     setBulkConfirming(false)
   }
 
@@ -138,14 +209,53 @@ export default function SignOffClient({ items: initial }: Props) {
 
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
+      {/* Filters — same as the Maintenance page, minus status (everything here is contractor complete) */}
+      {queue.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>
+            <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#b0aea8' }} />
+            <input className="input" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />
+          </div>
+          <select
+            className="input"
+            style={{ flex: '0 0 auto', width: 'auto', ...(filterAssignee ? { borderColor: '#2383e2', color: '#2383e2' } : {}) }}
+            value={filterAssignee}
+            onChange={e => changeAssigneeFilter(e.target.value)}
+            aria-label="Filter by assignee"
+          >
+            <option value="">Everyone&apos;s items</option>
+            <option value={ASSIGNEE_ME}>My items + unassigned</option>
+            {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
+            <option value={ASSIGNEE_UNASSIGNED}>Only unassigned</option>
+          </select>
+          <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }} aria-label="Filter by project">
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {filterProject && (
+            <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterUnit} onChange={e => setFilterUnit(e.target.value)} aria-label="Filter by unit">
+              <option value="">All Units</option>
+              {unitsForProject.map(u => <option key={u.id} value={u.id}>{u.label}</option>)}
+            </select>
+          )}
+          <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterContractor} onChange={e => setFilterContractor(e.target.value)} aria-label="Filter by contractor">
+            <option value="">All Contractors</option>
+            {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+          </select>
+          {hasFilters && (
+            <button className="btn btn-ghost" style={{ color: '#787774' }} onClick={clearFilters}><X size={15} /> Clear</button>
+          )}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
           <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
-          {items.length > 0 && (
+          {queue.length > 0 && (
             <span style={{ fontSize: 12, color: '#787774' }}>
-              · {items.length} item{items.length !== 1 ? 's' : ''} awaiting
+              · {hasFilters ? `${items.length} of ${queue.length}` : queue.length} item{queue.length !== 1 ? 's' : ''} awaiting
             </span>
           )}
         </div>
@@ -156,12 +266,17 @@ export default function SignOffClient({ items: initial }: Props) {
             disabled={bulkConfirming}
           >
             <CheckCheck size={15} />
-            {bulkConfirming ? 'Confirming…' : `Confirm All ${items.length}`}
+            {bulkConfirming ? 'Confirming…' : hasFilters ? `Confirm ${items.length} shown` : `Confirm All ${items.length}`}
           </button>
         )}
       </div>
 
-      {items.length === 0 ? (
+      {queue.length > 0 && items.length === 0 ? (
+        <div className="empty-state">
+          <p style={{ fontSize: 15, fontWeight: 500 }}>No items match your filters</p>
+          <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={clearFilters}>Clear filters</button>
+        </div>
+      ) : items.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: 15, fontWeight: 500 }}>Queue is clear</p>
           <p>No items awaiting sign-off right now.</p>

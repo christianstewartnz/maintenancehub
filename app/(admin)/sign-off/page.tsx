@@ -7,15 +7,21 @@ export const dynamic = 'force-dynamic'
 export default async function SignOffPage() {
   const supabase = await createClient()
 
-  const { data: items } = await supabase
-    .from('maintenance_items')
-    .select(`
-      id, item_number, title, created_at, updated_at, contractor_id,
-      unit:units(id, unit_identifier, address, project:projects(id, name)),
-      contractor:contractors(id, company_name, contact_name, email)
-    `)
-    .eq('status', 'contractor_complete')
-    .order('updated_at', { ascending: true })
+  const [{ data: items }, projectsRes, contractorsRes, usersRes, { data: { user } }] = await Promise.all([
+    supabase
+      .from('maintenance_items')
+      .select(`
+        id, item_number, title, description, created_at, updated_at, contractor_id, assigned_to,
+        unit:units(id, unit_identifier, address, project:projects(id, name)),
+        contractor:contractors(id, company_name, contact_name, email)
+      `)
+      .eq('status', 'contractor_complete')
+      .order('updated_at', { ascending: true }),
+    supabase.from('projects').select('id, name').eq('status', 'active').order('name'),
+    supabase.from('contractors').select('id, company_name').order('company_name'),
+    supabase.from('profiles').select('id, email, full_name').order('full_name', { nullsFirst: false }).order('email'),
+    supabase.auth.getUser(),
+  ])
 
   const itemIds = (items ?? []).map(i => i.id)
 
@@ -45,7 +51,13 @@ export default async function SignOffPage() {
         title="Sign-off Queue"
         description="Contractor-complete items awaiting your confirmation"
       />
-      <SignOffClient items={enriched} />
+      <SignOffClient
+        items={enriched}
+        projects={projectsRes.data ?? []}
+        contractors={contractorsRes.data ?? []}
+        users={usersRes.data ?? []}
+        currentUserId={user?.id ?? ''}
+      />
     </div>
   )
 }
