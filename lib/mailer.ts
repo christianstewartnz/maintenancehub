@@ -1,5 +1,6 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 import { Resend } from 'resend'
+import { format } from 'node:util'
 
 /**
  * Single place the app sends email from.
@@ -51,6 +52,16 @@ function fromHeader() {
   return `${SENDER_NAME} <${bareAddress(configured)}>`
 }
 
+function appHostname(): string | undefined {
+  try {
+    const url = env('NEXT_PUBLIC_APP_URL')
+    const host = url ? new URL(url).hostname : undefined
+    return host && host !== 'localhost' ? host : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function smtpConfig() {
   const port = Number(env('SMTP_PORT') ?? 465)
   const secureVar = env('SMTP_SECURE')
@@ -61,6 +72,9 @@ function smtpConfig() {
     secure: secureVar ? secureVar.toLowerCase() === 'true' : port === 465,
     user: env('SMTP_USER'),
     pass: env('SMTP_PASS'),
+    // Name the app gives in its SMTP greeting. Serverless hosts otherwise send a
+    // random internal machine name, which some mail servers distrust.
+    heloName: env('SMTP_HELO_NAME') ?? appHostname(),
   }
 }
 
@@ -72,6 +86,7 @@ function getTransporter() {
       host: c.host,
       port: c.port,
       secure: c.secure,
+      name: c.heloName,
       auth: c.user ? { user: c.user, pass: c.pass ?? '' } : undefined,
     })
   }
@@ -109,6 +124,54 @@ export async function diagnoseSmtp() {
     }
   }
   return info
+}
+
+/**
+ * Sends one plain test email over SMTP and returns the full conversation with
+ * the mail server, with credentials removed, so it can be handed to the provider.
+ */
+export async function smtpTestSend(to: string) {
+  const c = smtpConfig()
+  const log: string[] = []
+  const secrets = [c.pass, c.pass && Buffer.from(c.pass).toString('base64'),
+    c.user && c.pass && Buffer.from(`\u0000${c.user}\u0000${c.pass}`).toString('base64')]
+    .filter((s): s is string => !!s)
+  const scrub = (s: string) => secrets.reduce((acc, sec) => acc.split(sec).join('[hidden]'), s)
+  const write = (level: string) => (_entry: unknown, message: string, ...args: unknown[]) => {
+    log.push(`${level} ${scrub(format(message, ...args))}`)
+  }
+  const logger = {
+    level: () => {}, trace: write('trace'), debug: write('debug'), info: write('info'),
+    warn: write('warn'), error: write('error'), fatal: write('fatal'),
+  }
+
+  const t = nodemailer.createTransport({
+    host: c.host, port: c.port, secure: c.secure, name: c.heloName,
+    auth: c.user ? { user: c.user, pass: c.pass ?? '' } : undefined,
+    logger, debug: true,
+  })
+
+  let result: string
+  try {
+    const r = await t.sendMail({
+      from: fromHeader(),
+      to,
+      subject: `${SENDER_NAME}: SMTP test from live server`,
+      text: `Test email sent from the live server (region ${process.env.VERCEL_REGION ?? 'unknown'}).`,
+    })
+    result = `sent: ${r.response}`
+  } catch (e) {
+    result = `failed: ${e instanceof Error ? e.message : String(e)}`
+  } finally {
+    t.close()
+  }
+
+  let publicIp: string | null = null
+  try {
+    publicIp = (await (await fetch('https://api.ipify.org', { cache: 'no-store' })).text()).trim()
+  } catch { /* not essential */ }
+
+  return { to, region: process.env.VERCEL_REGION ?? null, publicIp, result, log }
 }
 
 /** Sends an email. Never throws; returns { error } on failure. */
