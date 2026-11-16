@@ -400,6 +400,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       {showCreate && (
         <CreateMaintenanceModal
           projects={projects}
+          contractors={contractors}
           users={users}
           currentUserId={currentUserId}
           onClose={() => setShowCreate(false)}

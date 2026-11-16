@@ -8,27 +8,31 @@ import { profileName } from '@/lib/assignees'
 
 interface LineItem {
   trade_id: string
+  contractor_id: string
   title: string
   description: string
 }
 
-const emptyLine = (): LineItem => ({ trade_id: '', title: '', description: '' })
+const emptyLine = (): LineItem => ({ trade_id: '', contractor_id: '', title: '', description: '' })
 
 interface Props {
   projects: { id: string; name: string }[]
+  contractors: { id: string; company_name: string }[]
   users: Profile[]
   currentUserId: string
   onClose: () => void
   onCreated: (item: MaintenanceItem) => void
 }
 
-export default function CreateMaintenanceModal({ projects, users, currentUserId, onClose, onCreated }: Props) {
+export default function CreateMaintenanceModal({ projects, contractors, users, currentUserId, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')
   const [projectId, setProjectId] = useState('')
   const [unitId, setUnitId] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
   const [units, setUnits] = useState<{ id: string; unit_identifier: string | null; address: string | null }[]>([])
   const [trades, setTrades] = useState<{ id: string; name: string }[]>([])
+  // trade_id -> contractor_id, from the project's trade assignments
+  const [tradeContractor, setTradeContractor] = useState<Record<string, string>>({})
   const [lines, setLines] = useState<LineItem[]>([emptyLine()])
   const [saving, setSaving] = useState(false)
   // AI parse state
@@ -38,17 +42,26 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
   const [aiResults, setAiResults] = useState<{ unit_hint: string | null; title: string; description: string | null; trade_hint: string | null }[]>([])
   const [aiUnitIds, setAiUnitIds] = useState<string[]>([])
   const [aiTradeIds, setAiTradeIds] = useState<string[]>([])
+  const [aiContractorIds, setAiContractorIds] = useState<string[]>([])
   const supabase = createClient()
 
   useEffect(() => {
-    if (!projectId) { setUnits([]); setTrades([]); setUnitId(''); setAiResults([]); return }
+    if (!projectId) { setUnits([]); setTrades([]); setTradeContractor({}); setUnitId(''); setAiResults([]); return }
     setUnitId('')
+    // Trades are per-project, so clear trade/contractor picks when the project changes
+    setLines(prev => prev.map(l => ({ ...l, trade_id: '', contractor_id: '' })))
     Promise.all([
       supabase.from('units').select('id, unit_identifier, address').eq('project_id', projectId).order('unit_identifier'),
       supabase.from('trades').select('id, name').eq('project_id', projectId).order('name'),
-    ]).then(([u, t]) => {
+      supabase.from('project_trade_assignments').select('trade_id, contractor_id').eq('project_id', projectId),
+    ]).then(([u, t, a]) => {
       setUnits(u.data ?? [])
       setTrades(t.data ?? [])
+      const map: Record<string, string> = {}
+      for (const row of (a.data ?? []) as { trade_id: string; contractor_id: string }[]) {
+        if (row.trade_id && row.contractor_id && !map[row.trade_id]) map[row.trade_id] = row.contractor_id
+      }
+      setTradeContractor(map)
     })
   }, [projectId])
 
@@ -59,10 +72,12 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
       const match = units.find(u => r.unit_hint && u.unit_identifier?.toLowerCase().includes(r.unit_hint.toLowerCase()))
       return match?.id ?? ''
     }))
-    setAiTradeIds(aiResults.map(r => {
+    const tradeIds = aiResults.map(r => {
       const match = trades.find(t => r.trade_hint && t.name.toLowerCase().includes(r.trade_hint.toLowerCase()))
       return match?.id ?? ''
-    }))
+    })
+    setAiTradeIds(tradeIds)
+    setAiContractorIds(tradeIds.map(tid => (tid && tradeContractor[tid]) || ''))
   }, [aiResults])
 
   async function handleAiParse() {
@@ -89,18 +104,21 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
       const r = aiResults[i]
       const uid = aiUnitIds[i]
       const tid = aiTradeIds[i]
+      const cid = aiContractorIds[i]
       if (!uid) continue
       const { data } = await supabase
         .from('maintenance_items')
         .insert({
           unit_id: uid,
           trade_id: tid || null,
+          contractor_id: cid || null,
+          status: cid ? 'assigned' : 'logged',
           title: r.title,
           description: r.description || null,
           assigned_to: assignedTo || null,
         })
         .select(`
-          id, item_number, title, status, created_at, updated_at, assigned_to,
+          id, item_number, title, status, created_at, updated_at, assigned_to, contractor_id,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -115,6 +133,28 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
 
   function updateLine(idx: number, field: keyof LineItem, value: string) {
     setLines(prev => prev.map((l, i) => i === idx ? { ...l, [field]: value } : l))
+  }
+
+  // Picking a trade pre-fills that trade's contractor for the project, unless a
+  // contractor was already chosen by hand (i.e. differs from the old trade's default).
+  function updateLineTrade(idx: number, tradeId: string) {
+    setLines(prev => prev.map((l, i) => {
+      if (i !== idx) return l
+      const prevDefault = l.trade_id ? tradeContractor[l.trade_id] ?? '' : ''
+      const manual = l.contractor_id && l.contractor_id !== prevDefault
+      return { ...l, trade_id: tradeId, contractor_id: manual ? l.contractor_id : (tradeContractor[tradeId] ?? '') }
+    }))
+  }
+
+  function updateAiTrade(idx: number, tradeId: string) {
+    const prevTrade = aiTradeIds[idx]
+    const prevDefault = prevTrade ? tradeContractor[prevTrade] ?? '' : ''
+    setAiTradeIds(prev => prev.map((v, i) => i === idx ? tradeId : v))
+    setAiContractorIds(prev => prev.map((v, i) => {
+      if (i !== idx) return v
+      const manual = v && v !== prevDefault
+      return manual ? v : (tradeContractor[tradeId] ?? '')
+    }))
   }
 
   function addLine() { setLines(prev => [...prev, emptyLine()]) }
@@ -134,12 +174,14 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
         .insert({
           unit_id: unitId,
           trade_id: line.trade_id || null,
+          contractor_id: line.contractor_id || null,
+          status: line.contractor_id ? 'assigned' : 'logged',
           title: line.title.trim(),
           description: line.description.trim() || null,
           assigned_to: assignedTo || null,
         })
         .select(`
-          id, item_number, title, status, created_at, updated_at, assigned_to,
+          id, item_number, title, status, created_at, updated_at, assigned_to, contractor_id,
           unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
           trade:trades(id, name),
           contractor:contractors(id, company_name),
@@ -260,15 +302,22 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
                       )}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div style={{ gridColumn: 'span 1' }}>
+                      <div style={{ gridColumn: 'span 2' }}>
                         <label style={labelStyle}>Title *</label>
                         <input className="input" value={line.title} onChange={e => updateLine(idx, 'title', e.target.value)} placeholder="e.g. Leaking kitchen tap" required={idx === 0} />
                       </div>
                       <div>
                         <label style={labelStyle}>Trade</label>
-                        <select className="input" value={line.trade_id} onChange={e => updateLine(idx, 'trade_id', e.target.value)} disabled={!projectId}>
+                        <select className="input" value={line.trade_id} onChange={e => updateLineTrade(idx, e.target.value)} disabled={!projectId}>
                           <option value="">Select trade…</option>
                           {trades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Contractor</label>
+                        <select className="input" value={line.contractor_id} onChange={e => updateLine(idx, 'contractor_id', e.target.value)} disabled={!projectId}>
+                          <option value="">Not assigned yet</option>
+                          {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
                         </select>
                       </div>
                       <div style={{ gridColumn: 'span 2' }}>
@@ -342,9 +391,16 @@ export default function CreateMaintenanceModal({ projects, users, currentUserId,
                           </div>
                           <div>
                             <label style={labelStyle}>Trade{r.trade_hint ? ` (AI: ${r.trade_hint})` : ''}</label>
-                            <select className="input" value={aiTradeIds[idx] ?? ''} onChange={e => setAiTradeIds(prev => prev.map((v, i) => i === idx ? e.target.value : v))}>
+                            <select className="input" value={aiTradeIds[idx] ?? ''} onChange={e => updateAiTrade(idx, e.target.value)}>
                               <option value="">Select trade…</option>
                               {trades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                          </div>
+                          <div style={{ gridColumn: 'span 2' }}>
+                            <label style={labelStyle}>Contractor</label>
+                            <select className="input" value={aiContractorIds[idx] ?? ''} onChange={e => setAiContractorIds(prev => prev.map((v, i) => i === idx ? e.target.value : v))}>
+                              <option value="">Not assigned yet</option>
+                              {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
                             </select>
                           </div>
                         </div>
