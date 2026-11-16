@@ -78,7 +78,9 @@ export async function GET(request: Request) {
     items = items.filter(i =>
       i.title?.toLowerCase().includes(search) ||
       i.description?.toLowerCase().includes(search) ||
-      i.item_number?.toLowerCase().includes(search),
+      i.item_number?.toLowerCase().includes(search) ||
+      i.unit?.unit_identifier?.toLowerCase().includes(search) ||
+      i.unit?.address?.toLowerCase().includes(search),
     )
   }
 

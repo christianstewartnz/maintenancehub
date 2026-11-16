@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { reportEmail } from '@/lib/email-templates'
+import { formatUnitLabel } from '@/lib/utils'
 
 // Called by Vercel cron or manually: POST /api/reports/send
 // Requires Bearer token matching CRON_SECRET env var
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
     // Query maintenance items
     let query = serviceSupabase
       .from('maintenance_items')
-      .select('id, item_number, title, status, created_at, completed_at, unit:units(unit_identifier, project:projects(id, name))')
+      .select('id, item_number, title, status, created_at, completed_at, unit:units(unit_identifier, address, project:projects(id, name))')
 
     if (prefs.report_scope === 'per_project' && prefs.report_projects?.length > 0) {
       // Filter to specific projects via units
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
         return {
           title: i.title,
           itemNumber: i.item_number,
-          unitIdentifier: unit?.unit_identifier ?? '—',
+          unitLabel: formatUnitLabel(unit),
           projectName: project?.name ?? '—',
           daysSince: Math.floor((now.getTime() - new Date(i.created_at).getTime()) / 86400000),
         }
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
         return {
           title: i.title,
           itemNumber: i.item_number,
-          unitIdentifier: unit?.unit_identifier ?? '—',
+          unitLabel: formatUnitLabel(unit),
           projectName: project?.name ?? '—',
         }
       })

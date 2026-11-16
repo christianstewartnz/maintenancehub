@@ -52,7 +52,7 @@ export default function SignOffClient({ items: initial }: Props) {
 
   // Group items by project → unit
   const groups = useMemo(() => {
-    const projectMap = new Map<string, { name: string; units: Map<string, { identifier: string; address: string; items: Item[] }> }>()
+    const projectMap = new Map<string, { name: string; units: Map<string, { unitId: string; identifier: string | null; address: string | null; items: Item[] }> }>()
     for (const item of items) {
       const unit = item.unit as any
       const projectId = unit?.project?.id ?? '__unknown__'
@@ -60,7 +60,7 @@ export default function SignOffClient({ items: initial }: Props) {
       const unitId = unit?.id ?? '__unknown__'
       if (!projectMap.has(projectId)) projectMap.set(projectId, { name: projectName, units: new Map() })
       const proj = projectMap.get(projectId)!
-      if (!proj.units.has(unitId)) proj.units.set(unitId, { identifier: unit?.unit_identifier ?? 'Unknown Unit', address: unit?.address ?? '', items: [] })
+      if (!proj.units.has(unitId)) proj.units.set(unitId, { unitId, identifier: unit?.unit_identifier ?? null, address: unit?.address ?? null, items: [] })
       proj.units.get(unitId)!.items.push(item)
     }
     return Array.from(projectMap.values()).map(proj => ({
@@ -185,7 +185,7 @@ export default function SignOffClient({ items: initial }: Props) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {group.units.map(unit => (
-                  <div key={unit.identifier}>
+                  <div key={unit.unitId}>
                     {/* Unit header */}
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 8,
@@ -196,9 +196,9 @@ export default function SignOffClient({ items: initial }: Props) {
                         background: '#f0f0ee', borderRadius: 4,
                         padding: '2px 8px', fontSize: 12, fontWeight: 600, color: '#555',
                       }}>
-                        {unit.identifier}
+                        {unit.identifier ?? unit.address ?? 'Unknown unit'}
                       </span>
-                      {unit.address && (
+                      {unit.identifier && unit.address && (
                         <span style={{ fontWeight: 400, color: '#a0a09e' }}>{unit.address}</span>
                       )}
                       <span style={{ color: '#d0d0ce', fontWeight: 400 }}>

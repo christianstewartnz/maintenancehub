@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown, ChevronRight, AlertTriangle, Clock, CalendarDays, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { getDaysSince, getAgeClass } from '@/lib/utils'
+import { getDaysSince, getAgeClass, formatUnitLabel } from '@/lib/utils'
 import type { Project, MaintenanceItem, MaintenanceStatus } from '@/lib/types'
 
 const AMBER_DAYS = 7
@@ -48,7 +48,7 @@ function formatMonthYear(date: Date) {
 // ─── Group items by project → unit for a given date ──────────────────────────
 interface UnitGroup {
   unitId: string
-  unitIdentifier: string
+  unitIdentifier: string | null
   address: string | null
   projectId: string
   projectName: string
@@ -96,8 +96,8 @@ function UnitCard({ group }: { group: UnitGroup }) {
       {/* Unit header */}
       <div style={{ padding: '12px 14px', borderBottom: '1px solid #f1f1ef' }}>
         <div style={{ fontSize: 11, color: '#787774', marginBottom: 2, fontWeight: 500 }}>{group.projectName}</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: '#37352f' }}>{group.unitIdentifier}</div>
-        {group.address && <div style={{ fontSize: 12, color: '#787774', marginTop: 2 }}>{group.address}</div>}
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#37352f' }}>{group.unitIdentifier ?? group.address ?? 'Unnamed unit'}</div>
+        {group.unitIdentifier && group.address && <div style={{ fontSize: 12, color: '#787774', marginTop: 2 }}>{group.address}</div>}
       </div>
       {/* Items */}
       <div style={{ padding: '8px 0' }}>
@@ -270,9 +270,9 @@ function WeekSlider({ items, onExpandMonth }: { items: MaintenanceItem[]; onExpa
                     <div key={ug.unitId} style={{
                       background: '#eef4ff', borderRadius: 4, padding: '2px 6px',
                       overflow: 'hidden',
-                    }} title={`${ug.projectName} · ${ug.unitIdentifier}`}>
+                    }} title={`${ug.projectName} · ${formatUnitLabel({ unit_identifier: ug.unitIdentifier, address: ug.address }, 'Unnamed unit')}`}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#37352f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ug.unitIdentifier}
+                        {formatUnitLabel({ unit_identifier: ug.unitIdentifier, address: ug.address }, 'Unnamed unit')}
                       </div>
                       <div style={{ fontSize: 9, color: '#787774', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {ug.projectName}
@@ -370,9 +370,9 @@ function MonthCalendar({ items, onClose }: { items: MaintenanceItem[]; onClose: 
                   <div key={ug.unitId} style={{
                     background: '#eef4ff', borderRadius: 3, padding: '2px 5px',
                     overflow: 'hidden',
-                  }} title={`${ug.projectName} · ${ug.unitIdentifier}`}>
+                  }} title={`${ug.projectName} · ${formatUnitLabel({ unit_identifier: ug.unitIdentifier, address: ug.address }, 'Unnamed unit')}`}>
                     <div style={{ fontSize: 10, fontWeight: 600, color: '#37352f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ug.unitIdentifier}
+                      {formatUnitLabel({ unit_identifier: ug.unitIdentifier, address: ug.address }, 'Unnamed unit')}
                     </div>
                     <div style={{ fontSize: 9, color: '#787774', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {ug.projectName}
@@ -435,7 +435,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
       if (!unitMap.has(unit.id)) unitMap.set(unit.id, { unitId: unit.id, unitIdentifier: unit.unit_identifier, address: unit.address, items: [] })
       unitMap.get(unit.id)!.items.push(item)
     }
-    const units = Array.from(unitMap.values()).sort((a, b) => (a.unitIdentifier ?? '').localeCompare(b.unitIdentifier ?? ''))
+    const units = Array.from(unitMap.values()).sort((a, b) => (a.unitIdentifier ?? a.address ?? '').localeCompare(b.unitIdentifier ?? b.address ?? ''))
     const overdueCount = projectItems.filter(i => getDaysSince(i.created_at) >= RED_DAYS).length
     const awaitingConfirm = projectItems.filter(i => i.status === 'contractor_complete').length
     return { project, units, totalOpen: projectItems.length, overdueCount, awaitingConfirm }
@@ -532,7 +532,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
                       >
                         {expandedUnits.has(unit.unitId) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         <span style={{ fontWeight: 500, color: '#37352f' }}>{unit.unitIdentifier ?? unit.address ?? 'Unnamed unit'}</span>
-                        {unit.address && <span style={{ color: '#787774', fontSize: 13 }}>{unit.address}</span>}
+                        {unit.unitIdentifier && unit.address && <span style={{ color: '#787774', fontSize: 13 }}>{unit.address}</span>}
                         <span style={{ marginLeft: 'auto', fontSize: 13, color: '#787774' }}>{unit.items.length} item{unit.items.length !== 1 ? 's' : ''}</span>
                       </button>
 

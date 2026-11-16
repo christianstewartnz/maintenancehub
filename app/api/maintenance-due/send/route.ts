@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { maintenanceDueEmail } from '@/lib/email-templates'
+import { formatUnitLabel } from '@/lib/utils'
 
 // Called daily by Vercel cron: POST /api/maintenance-due/send
 // Sends an alert email when units have their 90-day maintenance form due within 14 days or overdue.
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   // Fetch all units with a settlement date, joined to project name
   const { data: units, error } = await serviceSupabase
     .from('units')
-    .select('id, unit_identifier, settlement_date, project:projects(name)')
+    .select('id, unit_identifier, address, settlement_date, project:projects(name)')
     .not('settlement_date', 'is', null)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -31,8 +32,8 @@ export async function POST(req: Request) {
   const now = Date.now()
   const fourteenDays = 14 * 24 * 60 * 60 * 1000
 
-  type UnitRow = { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }
-  type OverdueRow = { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }
+  type UnitRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }
+  type OverdueRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }
 
   const upcomingUnits: UnitRow[] = []
   const overdueUnits: OverdueRow[] = []
@@ -44,14 +45,15 @@ export async function POST(req: Request) {
     const msUntilDue = due.getTime() - now
     const daysUntilDue = Math.ceil(msUntilDue / 86400000)
     const project = u.project as any
+    const unitLabel = formatUnitLabel(u)
     const projectName = project?.name ?? '—'
     const dueDateStr = due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
     const settlementStr = new Date(settlement).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 
     if (daysUntilDue < 0) {
-      overdueUnits.push({ unitIdentifier: u.unit_identifier, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysOverdue: Math.abs(daysUntilDue) })
+      overdueUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysOverdue: Math.abs(daysUntilDue) })
     } else if (msUntilDue <= fourteenDays) {
-      upcomingUnits.push({ unitIdentifier: u.unit_identifier, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysUntilDue })
+      upcomingUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysUntilDue })
     }
   }
 

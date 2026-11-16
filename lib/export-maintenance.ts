@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
 import type { MaintenanceStatus } from './types'
 import { profileName } from './assignees'
+import { formatUnitLabel } from './utils'
 
 // ─── Input shape (what the export route selects from Supabase) ─────────────
 
@@ -96,11 +97,15 @@ export function unitLabel(unit: ExportUnit | null): string {
   return unit?.address || unit?.unit_identifier || (unit?.lot_number ? `Lot ${unit.lot_number}` : 'Unknown unit')
 }
 
-function unitLotLabel(unit: ExportUnit): string {
-  const parts: string[] = []
-  if (unit.unit_identifier && unit.unit_identifier !== unit.address) parts.push(unit.unit_identifier)
-  if (unit.lot_number) parts.push(`Lot ${unit.lot_number}`)
-  return parts.join(' / ') || '—'
+/** Unit number when it differs from the address (some imports store the address as the identifier). */
+function distinctUnitNumber(unit: ExportUnit): string | null {
+  const id = unit.unit_identifier?.trim()
+  return id && id !== unit.address?.trim() ? id : null
+}
+
+/** Unit number + street address ("A12 · 5 Smith St"), or whichever exists; lot as a last resort. */
+function fullUnitLabel(unit: ExportUnit): string {
+  return formatUnitLabel({ unit_identifier: distinctUnitNumber(unit), address: unit.address }, unitLabel(unit))
 }
 
 function contractorLabel(c: ExportItem['contractor']): string {
@@ -172,12 +177,11 @@ function buildUnitSheet(wb: ExcelJS.Workbook, group: UnitGroup, opts: { withBack
   ws.columns = ITEM_COLUMNS.map(c => ({ width: c.width }))
 
   const title = ws.getCell('A1')
-  title.value = unitLabel(unit)
+  title.value = fullUnitLabel(unit)
   title.font = { name: FONT, size: 16, bold: true, color: { argb: NAVY } }
 
   const sub = [
     unit.project?.name ?? '',
-    unit.unit_identifier && unit.unit_identifier !== unit.address ? `Construction No. ${unit.unit_identifier}` : '',
     unit.lot_number ? `Lot ${unit.lot_number}` : '',
     `Settled ${unit.settlement_date ? formatNzDate(unit.settlement_date) : '—'}`,
   ].filter(Boolean).join('  ·  ')
@@ -280,8 +284,9 @@ function buildSummarySheet(
 ) {
   const cols: { header: string; width: number }[] = [
     ...(opts.multiProject ? [{ header: 'Project', width: 24 }] : []),
-    { header: 'Unit', width: 26 },
-    { header: 'Unit / Lot', width: 18 },
+    { header: 'Unit', width: 14 },
+    { header: 'Address', width: 30 },
+    { header: 'Lot', width: 10 },
     { header: 'Owner(s)', width: 44 },
     { header: opts.openOnly ? 'Open items' : 'Items', width: 12 },
     { header: 'No contractor yet', width: 16 },
@@ -319,18 +324,20 @@ function buildSummarySheet(
     const inProgress = g.items.filter(i => i.status === 'in_progress').length
 
     if (opts.multiProject) r.getCell(1).value = g.unit.project?.name ?? '—'
-    r.getCell(1 + off).value = internalLink(`${ref}!A1`, unitLabel(g.unit))
-    r.getCell(2 + off).value = unitLotLabel(g.unit)
-    r.getCell(3 + off).value = g.unit.owners?.map(o => o.name).filter(Boolean).join(', ') || '—'
-    r.getCell(4 + off).value = { formula: `COUNTA(${range('A')})`, result: n }
-    r.getCell(5 + off).value = { formula: `COUNTIF(${range('D')},"${NO_CONTRACTOR}")`, result: noContractor }
-    r.getCell(6 + off).value = { formula: `COUNTIF(${range('E')},"${STATUS_LABEL.in_progress}")`, result: inProgress }
+    // Unit number links to the unit's tab; projects without unit numbers (e.g. Karori) link on the address
+    r.getCell(1 + off).value = internalLink(`${ref}!A1`, distinctUnitNumber(g.unit) ?? unitLabel(g.unit))
+    r.getCell(2 + off).value = g.unit.address?.trim() || '—'
+    r.getCell(3 + off).value = g.unit.lot_number || '—'
+    r.getCell(4 + off).value = g.unit.owners?.map(o => o.name).filter(Boolean).join(', ') || '—'
+    r.getCell(5 + off).value = { formula: `COUNTA(${range('A')})`, result: n }
+    r.getCell(6 + off).value = { formula: `COUNTIF(${range('D')},"${NO_CONTRACTOR}")`, result: noContractor }
+    r.getCell(7 + off).value = { formula: `COUNTIF(${range('E')},"${STATUS_LABEL.in_progress}")`, result: inProgress }
 
     for (let col = 1; col <= cols.length; col++) {
       const c = r.getCell(col)
       c.font = { name: FONT, size: 10 }
       c.border = thinBorder
-      c.alignment = { vertical: 'middle', wrapText: true, horizontal: col > 3 + off ? 'center' : 'left' }
+      c.alignment = { vertical: 'middle', wrapText: true, horizontal: col > 4 + off ? 'center' : 'left' }
       if (idx % 2 === 1) c.fill = solid(STRIPE)
     }
     r.getCell(1 + off).font = { name: FONT, size: 10, underline: true, color: { argb: LINK } }
@@ -340,11 +347,11 @@ function buildSummarySheet(
   const totals = ws.getRow(row)
   totals.getCell(1).value = 'Total'
   totals.getCell(1).font = { name: FONT, size: 11, bold: true }
-  for (let col = 4 + off; col <= 6 + off; col++) {
+  for (let col = 5 + off; col <= 7 + off; col++) {
     const L = colLetter(col - 1)
     const sum = groups.reduce((acc, g) => {
-      if (col === 4 + off) return acc + g.items.length
-      if (col === 5 + off) return acc + g.items.filter(i => !i.contractor).length
+      if (col === 5 + off) return acc + g.items.length
+      if (col === 6 + off) return acc + g.items.filter(i => !i.contractor).length
       return acc + g.items.filter(i => i.status === 'in_progress').length
     }, 0)
     const c = totals.getCell(col)
@@ -416,7 +423,7 @@ export async function buildMaintenanceWorkbook(items: ExportItem[], options: Bui
   }
 
   const scopeName = options.singleUnit && groups[0]
-    ? `${groups[0].unit.project?.name ?? ''} - ${unitLabel(groups[0].unit)}`
+    ? `${groups[0].unit.project?.name ?? ''} - ${fullUnitLabel(groups[0].unit)}`
     : options.projectName ?? 'All Projects'
   const filename = `${scopeName} - ${heading} - ${formatNzDate(exportedAt)}.xlsx`.replace(/[\\/:*?"<>|]/g, '-')
 

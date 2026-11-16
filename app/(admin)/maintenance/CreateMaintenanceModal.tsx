@@ -5,6 +5,7 @@ import { Plus, X, Sparkles, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { MaintenanceItem, Profile } from '@/lib/types'
 import { profileName } from '@/lib/assignees'
+import { formatUnitLabel } from '@/lib/utils'
 
 interface LineItem {
   trade_id: string
@@ -39,7 +40,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
   const [aiText, setAiText] = useState('')
   const [aiParsing, setAiParsing] = useState(false)
   const [aiError, setAiError] = useState('')
-  const [aiResults, setAiResults] = useState<{ unit_hint: string | null; title: string; description: string | null; trade_hint: string | null }[]>([])
+  const [aiResults, setAiResults] = useState<{ unit_id?: string | null; unit_hint: string | null; title: string; description: string | null; trade_hint: string | null }[]>([])
   const [aiUnitIds, setAiUnitIds] = useState<string[]>([])
   const [aiTradeIds, setAiTradeIds] = useState<string[]>([])
   const [aiContractorIds, setAiContractorIds] = useState<string[]>([])
@@ -69,7 +70,11 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
   useEffect(() => {
     if (aiResults.length === 0) return
     setAiUnitIds(aiResults.map(r => {
-      const match = units.find(u => r.unit_hint && u.unit_identifier?.toLowerCase().includes(r.unit_hint.toLowerCase()))
+      if (r.unit_id && units.some(u => u.id === r.unit_id)) return r.unit_id
+      const hint = r.unit_hint?.toLowerCase()
+      const match = hint
+        ? units.find(u => u.unit_identifier?.toLowerCase().includes(hint)) ?? units.find(u => u.address?.toLowerCase().includes(hint))
+        : undefined
       return match?.id ?? ''
     }))
     const tradeIds = aiResults.map(r => {
@@ -266,7 +271,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
               <>
                 {/* ── Unit selector ── */}
                 <div style={{ marginBottom: 20 }}>
-                  <label style={labelStyle}>Construction No. *</label>
+                  <label style={labelStyle}>Unit / Address *</label>
                   <select
                     className="input"
                     required
@@ -280,7 +285,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                     </option>
                     {units.map(u => (
                       <option key={u.id} value={u.id}>
-                        {u.unit_identifier}{u.address ? ` — ${u.address}` : ''}
+                        {formatUnitLabel(u, 'Unnamed unit')}
                       </option>
                     ))}
                   </select>
@@ -383,10 +388,10 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                           <div>
-                            <label style={labelStyle}>Construction No. *</label>
+                            <label style={labelStyle}>Unit / Address *</label>
                             <select className="input" value={aiUnitIds[idx] ?? ''} onChange={e => setAiUnitIds(prev => prev.map((v, i) => i === idx ? e.target.value : v))}>
                               <option value="">Select unit…{r.unit_hint ? ` (AI suggested: ${r.unit_hint})` : ''}</option>
-                              {units.map(u => <option key={u.id} value={u.id}>{u.unit_identifier}{u.address ? ` — ${u.address}` : ''}</option>)}
+                              {units.map(u => <option key={u.id} value={u.id}>{formatUnitLabel(u, 'Unnamed unit')}</option>)}
                             </select>
                           </div>
                           <div>

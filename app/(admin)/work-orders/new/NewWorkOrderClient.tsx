@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatUnitLabel } from '@/lib/utils'
 
 interface Props {
   projects: { id: string; name: string }[]
@@ -155,7 +155,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                     <th style={{ width: 40 }}></th>
                     <th>#</th>
                     <th>Title</th>
-                    <th>Construction No.</th>
+                    <th>Unit</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -171,8 +171,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                         <td style={{ fontSize: 13, color: '#787774' }}>{item.item_number}</td>
                         <td style={{ fontWeight: 500 }}>{item.title}</td>
                         <td style={{ fontSize: 13 }}>
-                          {unit?.unit_identifier}
-                          {unit?.address && <span style={{ color: '#787774' }}> — {unit.address}</span>}
+                          {formatUnitLabel(unit)}
                         </td>
                         <td><StatusBadge status={item.status} /></td>
                       </tr>

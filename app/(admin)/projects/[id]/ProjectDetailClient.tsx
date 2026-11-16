@@ -6,7 +6,7 @@ import { Plus, Upload, Download, Trash2, UserPlus, Archive, ArchiveRestore, Penc
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatUnitLabel } from '@/lib/utils'
 import type { Project, Unit, UnitOwner, Trade, Contractor, ProjectTradeAssignment, WorkOrder } from '@/lib/types'
 
 interface Props {
@@ -317,7 +317,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 <tbody>
                   {units.map(u => (
                     <tr key={u.id}>
-                      <td style={{ fontWeight: 500 }}>{u.unit_identifier}</td>
+                      <td style={{ fontWeight: 500 }}>{u.unit_identifier ?? '—'}</td>
                       <td style={{ color: '#787774' }}>{u.lot_number ?? '—'}</td>
                       <td>{u.address ?? '—'}</td>
                       <td>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.name).join(', ') : '—'}</td>
@@ -573,8 +573,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
             </div>
             <div className="modal-body">
               <p style={{ margin: 0, color: '#37352f' }}>
-                Delete <strong>{confirmDeleteUnit.unit_identifier}</strong>
-                {confirmDeleteUnit.address ? ` — ${confirmDeleteUnit.address}` : ''}?
+                Delete <strong>{formatUnitLabel(confirmDeleteUnit, 'this unit')}</strong>?
               </p>
               <p style={{ margin: '8px 0 0', fontSize: 13, color: '#787774' }}>This cannot be undone. Any maintenance items linked to this unit will also be affected.</p>
             </div>

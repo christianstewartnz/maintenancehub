@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Mail } from 'lucide-react'
 import { COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
+import { formatUnitLabel } from '@/lib/utils'
 
 export interface PendingNotifyItem {
   id: string
@@ -67,7 +68,7 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{i.item_number}</td>
                     <td style={{ fontWeight: 500 }}>{i.title}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{i.unit?.project?.name ?? '—'}</td>
-                    <td style={{ fontSize: 13 }}>{i.unit?.unit_identifier ?? '—'}</td>
+                    <td style={{ fontSize: 13 }}>{formatUnitLabel(i.unit)}</td>
                   </tr>
                 ))}
               </tbody>

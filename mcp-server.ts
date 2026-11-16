@@ -19,6 +19,22 @@ const server = new McpServer({ name: 'maintenance-hub', version: '3.0.0' })
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+type UnitLike = { unit_identifier?: string | null; address?: string | null } | null | undefined
+
+/**
+ * Canonical unit reference — same semantics as formatUnitLabel in lib/utils.ts
+ * (kept local so this standalone server doesn't pull in the Next app's deps).
+ * Always shows BOTH the unit number and the street address when present
+ * (e.g. "A12 · 5 Smith St"); some projects (e.g. Karori) have no unit numbers,
+ * so the address alone is used.
+ */
+function unitLabel(unit: UnitLike, fallback = '—', separator = ' · '): string {
+  const id = unit?.unit_identifier?.trim()
+  const addr = unit?.address?.trim()
+  if (id && addr) return `${id}${separator}${addr}`
+  return id || addr || fallback
+}
+
 async function resolveProject(name: string) {
   const { data } = await supabase
     .from('projects')
@@ -203,9 +219,12 @@ server.tool(
 
 server.tool(
   'list_units',
-  'List units for a project',
-  { project: z.string().describe('Project name (partial) or project ID') },
-  async ({ project }) => {
+  'List units for a project, showing each unit\'s unit number (construction no.) and street address. Optionally filter by unit number, street address or lot number (partial match) — use the address for projects without unit numbers (e.g. Karori).',
+  {
+    project: z.string().describe('Project name (partial) or project ID'),
+    search: z.string().optional().describe('Optional filter: unit number, street address or lot number (partial match)'),
+  },
+  async ({ project, search }) => {
     const proj = await resolveProjectAny(project)
     if (!proj) return { content: [{ type: 'text', text: 'Project not found.' }] }
 
@@ -216,17 +235,23 @@ server.tool(
       .order('lot_number', { ascending: true })
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    const text = data.map((u: any) => {
+    const q = search?.trim().toLowerCase()
+    const rows = q
+      ? data.filter((u: any) =>
+          [u.unit_identifier, u.address, u.lot_number].some((v: unknown) => v != null && String(v).toLowerCase().includes(q)))
+      : data
+    const text = rows.map((u: any) => {
       const ownerNames = u.owners?.map((o: any) => o.name).join(', ')
-      return `[${u.id}] Construction No. ${u.unit_identifier}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${u.address ? ` | ${u.address}` : ''}${ownerNames ? ` | ${ownerNames}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}`
+      return `[${u.id}] Unit: ${unitLabel(u)}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${ownerNames ? ` | ${ownerNames}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}`
     }).join('\n')
-    return { content: [{ type: 'text', text: `Units for ${proj.name}:\n\n${text || 'No units.'}` }] }
+    const empty = q ? `No units matching "${search}".` : 'No units.'
+    return { content: [{ type: 'text', text: `Units for ${proj.name}:\n\n${text || empty}` }] }
   },
 )
 
 server.tool(
   'get_unit',
-  'Get full details for a single unit by ID',
+  'Get full details for a single unit by ID (unit number, street address, owners, access contact). Use list_units with search to find a unit by unit number or address.',
   { unit_id: z.string().describe('Unit ID (from list_units)') },
   async ({ unit_id }) => {
     const { data, error } = await supabase
@@ -243,7 +268,8 @@ server.tool(
       : '  (none)'
     const lines = [
       `Project: ${(data as any).project?.name ?? '?'}`,
-      `Construction No.: ${data.unit_identifier}`,
+      `Unit: ${unitLabel(data)}`,
+      `Construction No.: ${data.unit_identifier ?? '—'}`,
       `Lot number: ${data.lot_number ?? '—'}`,
       `Address: ${data.address ?? '—'}`,
       `Owners:\n${ownerLines}`,
@@ -276,11 +302,11 @@ server.tool(
     const { data, error } = await supabase
       .from('units')
       .insert({ project_id: proj.id, ...fields })
-      .select('id, unit_identifier, lot_number')
+      .select('id, unit_identifier, lot_number, address')
       .single()
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Unit created [id: ${data.id}]${data.unit_identifier ? ` Construction No. ${data.unit_identifier}` : ''}${data.lot_number ? ` Lot ${data.lot_number}` : ''}` }] }
+    return { content: [{ type: 'text', text: `Unit created [id: ${data.id}] ${unitLabel(data, '(no unit number or address)')}${data.lot_number ? ` | Lot ${data.lot_number}` : ''}` }] }
   },
 )
 
@@ -304,9 +330,10 @@ server.tool(
       if (v !== undefined) updates[k] = v === '' ? null : v
     }
 
-    const { error } = await supabase.from('units').update(updates).eq('id', unit_id)
+    const { data, error } = await supabase.from('units').update(updates).eq('id', unit_id).select('unit_identifier, address').maybeSingle()
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Unit ${unit_id} updated.` }] }
+    if (!data) return { content: [{ type: 'text', text: 'Unit not found.' }] }
+    return { content: [{ type: 'text', text: `Unit ${unitLabel(data, unit_id)} updated [id: ${unit_id}].` }] }
   },
 )
 
@@ -513,14 +540,14 @@ server.tool(
 
     const { data: open } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, status, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', c.id)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
 
     const { data: recent } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, completed_at, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, completed_at, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', c.id)
       .eq('status', 'complete')
       .order('completed_at', { ascending: false })
@@ -537,13 +564,13 @@ server.tool(
       `Open items (${open?.length ?? 0}):`,
       ...(open ?? []).map(i => {
         const u = i.unit as any
-        return `  [${i.item_number}] ${i.title} | ${i.status} | ${(u?.project as any)?.name ?? '?'} · ${u?.unit_identifier ?? '?'}`
+        return `  [${i.item_number}] ${i.title} | ${i.status} | ${(u?.project as any)?.name ?? '?'} | Unit ${unitLabel(u, '?')}`
       }),
       ``,
       `Recently completed (last 10):`,
       ...(recent ?? []).map(i => {
         const u = i.unit as any
-        return `  [${i.item_number}] ${i.title} | ${(u?.project as any)?.name ?? '?'} · ${u?.unit_identifier ?? '?'}`
+        return `  [${i.item_number}] ${i.title} | ${(u?.project as any)?.name ?? '?'} | Unit ${unitLabel(u, '?')}`
       }),
     ]
 
@@ -634,7 +661,7 @@ server.tool(
 
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, created_at, unit:units(unit_identifier)')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier, address)')
       .in('unit_id', unitIds)
       .not('status', 'in', '("complete","cancelled")')
       .order('item_number')
@@ -646,7 +673,7 @@ server.tool(
     if (!data?.length) return { content: [{ type: 'text', text: `No open items for ${proj.name}.` }] }
 
     const text = data.map(i => {
-      const unit = (i.unit as any)?.unit_identifier ?? '?'
+      const unit = unitLabel(i.unit as any, '?')
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
       return `[${i.item_number}] ${i.title} | ${i.status} | Unit ${unit} | ${age}d old`
     }).join('\n')
@@ -666,7 +693,7 @@ server.tool(
   async ({ status, project, limit = 20 }) => {
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, created_at, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier, address, project:projects(name))')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -685,7 +712,7 @@ server.tool(
 
     const text = data.map(i => {
       const unit = i.unit as any
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'}`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} | Unit ${unitLabel(unit, '?')}`
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No items found.' }] }
@@ -729,7 +756,8 @@ server.tool(
       `[${item.item_number}] ${item.title}`,
       `Status: ${item.status}`,
       `Project: ${(u?.project as any)?.name ?? '—'}`,
-      `Unit: Construction No. ${u?.unit_identifier ?? '—'} | Lot ${u?.lot_number ?? '—'}`,
+      `Unit: ${unitLabel(u)} | Lot ${u?.lot_number ?? '—'}`,
+      `Construction No.: ${u?.unit_identifier ?? '—'}`,
       `Address: ${u?.address ?? '—'}`,
       u?.owners?.length ? `Owners: ${u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}${o.email ? ` <${o.email}>` : ''}`).join(', ')}` : 'Owner: —',
       `Trade: ${(item.trade as any)?.name ?? '—'}`,
@@ -753,9 +781,9 @@ server.tool(
 
 server.tool(
   'create_maintenance_item',
-  'Create a new maintenance item on a unit',
+  'Create a new maintenance item on a unit. Find the unit_id with list_units (search by unit number or street address).',
   {
-    unit_id: z.string().describe('Unit ID (from list_units)'),
+    unit_id: z.string().describe('Unit ID (from list_units — search by unit number or street address)'),
     title: z.string().describe('Short title of the issue'),
     description: z.string().optional(),
     trade_id: z.string().optional().describe('Trade ID if known (from list_trades)'),
@@ -764,11 +792,11 @@ server.tool(
     const { data, error } = await supabase
       .from('maintenance_items')
       .insert({ unit_id, title, description: description ?? null, trade_id: trade_id ?? null })
-      .select('item_number, title, status')
+      .select('item_number, title, status, unit:units(unit_identifier, address)')
       .single()
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status})` }] }
+    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status}) | Unit ${unitLabel(data.unit as any, '?')}` }] }
   },
 )
 
@@ -898,7 +926,15 @@ server.tool(
       p_email_date: args.email_date ?? null,
     })
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: JSON.stringify(data) }] }
+    // The RPC result doesn't carry unit details; add the unit number + address so
+    // the update can be cross-checked against the email.
+    const { data: itemUnit } = await supabase
+      .from('maintenance_items')
+      .select('unit:units(unit_identifier, address)')
+      .eq('item_number', args.item_number)
+      .maybeSingle()
+    const unitLine = itemUnit ? `\nUnit: ${unitLabel(itemUnit.unit as any, '?')}` : ''
+    return { content: [{ type: 'text', text: `${JSON.stringify(data)}${unitLine}` }] }
   },
 )
 
@@ -946,7 +982,7 @@ server.tool(
 
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, created_at, unit:units(unit_identifier, project:projects(name))')
+      .select('item_number, title, status, created_at, unit:units(unit_identifier, address, project:projects(name))')
       .in('status', ['logged', 'assigned', 'in_progress'])
       .lt('created_at', cutoff)
       .order('created_at')
@@ -960,7 +996,7 @@ server.tool(
     const text = data.map(i => {
       const unit = i.unit as any
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} · Construction No. ${unit?.unit_identifier ?? '?'} | ${age}d`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} | Unit ${unitLabel(unit, '?')} | ${age}d`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Items overdue by >${days} days (${data.length}):\n\n${text}` }] }
@@ -978,7 +1014,7 @@ server.tool(
       .from('maintenance_items')
       .select(`
         item_number, title, updated_at,
-        unit:units(unit_identifier, project:projects(name)),
+        unit:units(unit_identifier, address, project:projects(name)),
         contractor:contractors(company_name)
       `)
       .eq('status', 'contractor_complete')
@@ -990,7 +1026,7 @@ server.tool(
     const text = data.map(i => {
       const unit = i.unit as any
       const age = Math.floor((Date.now() - new Date(i.updated_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${(unit?.project as any)?.name ?? '?'} · ${unit?.unit_identifier ?? '?'} | ${(i.contractor as any)?.company_name ?? '—'} | waiting ${age}d`
+      return `[${i.item_number}] ${i.title} | ${(unit?.project as any)?.name ?? '?'} | Unit ${unitLabel(unit, '?')} | ${(i.contractor as any)?.company_name ?? '—'} | waiting ${age}d`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Sign-off queue (${data.length}):\n\n${text}` }] }
@@ -1120,7 +1156,7 @@ server.tool(
       ...(items ?? []).map(i => {
         const u = i.unit as any
         const ownerStr = u?.owners?.length ? u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}`).join(', ') : '—'
-        return `  [${i.item_number}] ${i.title} | ${i.status} | Unit ${u?.unit_identifier ?? '?'} — ${u?.address ?? '—'} | ${ownerStr}`
+        return `  [${i.item_number}] ${i.title} | ${i.status} | Unit ${unitLabel(u, '?')} | ${ownerStr}`
       }),
     ]
 

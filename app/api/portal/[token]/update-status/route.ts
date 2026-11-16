@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCompleteEmail } from '@/lib/email-templates'
+import { formatUnitLabel } from '@/lib/utils'
 
 export async function POST(
   req: Request,
@@ -43,7 +44,7 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
 
   const { data: item } = await serviceSupabase
     .from('maintenance_items')
-    .select('id, item_number, title, unit:units(unit_identifier, project:projects(id, name)), contractor:contractors(company_name)')
+    .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(id, name)), contractor:contractors(company_name)')
     .eq('id', itemId)
     .single()
 
@@ -69,7 +70,7 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
   const { subject, html } = contractorCompleteEmail({
     itemTitle: item.title,
     itemNumber: item.item_number,
-    unitIdentifier: unit?.unit_identifier ?? '—',
+    unitLabel: formatUnitLabel(unit),
     projectName: project?.name ?? '—',
     contractorName: contractor?.company_name ?? 'Contractor',
     appUrl,

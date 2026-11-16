@@ -1,32 +1,76 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { formatUnitLabel } from '@/lib/utils'
 
 const client = new Anthropic()
+
+type Unit = { id: string; unit_identifier: string | null; address: string | null }
+type ParsedItem = {
+  unit_id?: string | null
+  unit_hint?: string | null
+  title: string
+  description: string | null
+  trade_hint: string | null
+}
+
+const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** Match a parsed item to a unit by AI-chosen id, then by unit number, then by street address. */
+function resolveUnit(units: Unit[], unitId?: string | null, hint?: string | null): Unit | null {
+  if (unitId) {
+    const byId = units.find(u => u.id === unitId)
+    if (byId) return byId
+  }
+  const h = norm(hint)
+  if (!h) return null
+  return (
+    units.find(u => norm(u.unit_identifier) === h) ??
+    units.find(u => norm(u.address) === h) ??
+    units.find(u => {
+      const a = norm(u.address)
+      return a !== '' && ((h.length >= 4 && a.includes(h)) || h.includes(a))
+    }) ??
+    units.find(u => {
+      const id = norm(u.unit_identifier)
+      return id !== '' && h.split(' ').includes(id)
+    }) ??
+    null
+  )
+}
 
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'AI parsing is not configured (missing ANTHROPIC_API_KEY)' }, { status: 500 })
   }
 
-  const { text, units, trades } = await req.json() as {
+  const { text, units: rawUnits, trades: rawTrades } = await req.json() as {
     text: string
-    units: { id: string; unit_identifier: string; address: string | null }[]
-    trades: { id: string; name: string }[]
+    units?: Unit[]
+    trades?: { id: string; name: string }[]
   }
+  const units = rawUnits ?? []
+  const trades = rawTrades ?? []
 
   if (!text?.trim()) {
     return Response.json({ error: 'No text provided' }, { status: 400 })
   }
 
-  const unitList = units.map(u => `${u.unit_identifier}${u.address ? ` (${u.address})` : ''}`).join(', ')
+  // Each unit is listed with BOTH its unit number and street address (some
+  // projects, e.g. Karori, have no unit numbers, so the address is the only key).
+  const unitList = units
+    .map(u => `- id: ${u.id} | unit no: ${u.unit_identifier?.trim() || '(none)'} | address: ${u.address?.trim() || '(none)'}`)
+    .join('\n')
   const tradeList = trades.map(t => t.name).join(', ')
 
   const prompt = `You are a maintenance coordinator parsing a free-text maintenance report into structured work items.
 
-Available units: ${unitList || 'not specified'}
+Available units (a unit may be referred to by its unit number OR its street address):
+${unitList || 'not specified'}
+
 Available trades: ${tradeList || 'not specified'}
 
 Parse the following text and return a JSON array of maintenance items. Each item must have:
-- unit_hint: the unit identifier mentioned (match exactly to available units, or null if unclear)
+- unit_id: the id of the matching unit from the list above, matched by unit number or street address (or null if unclear)
+- unit_hint: the unit number or street address as mentioned in the text (or null if none)
 - title: short title of the issue (max 60 chars)
 - description: more detailed description (or null if none)
 - trade_hint: the most likely trade from the available list (or null if unclear)
@@ -50,7 +94,19 @@ ${text}`
   try {
     // Strip markdown code fences if present
     const raw = content.text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
-    const items = JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) throw new Error('not an array')
+    const items = parsed.map((item: ParsedItem) => {
+      const match = resolveUnit(units, item.unit_id, item.unit_hint)
+      return {
+        ...item,
+        unit_id: match?.id ?? null,
+        // Normalise the hint to the matched unit's number (or address when it has
+        // no number) so callers matching on either field find the right unit.
+        unit_hint: match ? (match.unit_identifier?.trim() || match.address?.trim() || item.unit_hint) : item.unit_hint,
+        unit_label: match ? formatUnitLabel(match) : null,
+      }
+    })
     return Response.json({ items })
   } catch {
     return Response.json({ error: 'Failed to parse AI response', raw: content.text }, { status: 500 })

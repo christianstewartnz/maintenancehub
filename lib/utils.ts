@@ -70,3 +70,18 @@ export function nextStatus(current: MaintenanceStatus): MaintenanceStatus | null
   const idx = STATUS_FLOW.indexOf(current)
   return idx < STATUS_FLOW.length - 1 ? STATUS_FLOW[idx + 1] : null
 }
+
+type UnitLike = { unit_identifier?: string | null; address?: string | null } | null | undefined
+
+/**
+ * Canonical unit reference: always shows BOTH the unit number and the street
+ * address when present (e.g. "A12 · 5 Smith St"). Some projects (e.g. Karori)
+ * have no unit numbers, so the address alone is used; never drop the address
+ * just because a unit number exists. Use this anywhere a unit is referenced.
+ */
+export function formatUnitLabel(unit: UnitLike, fallback = '—', separator = ' · '): string {
+  const id = unit?.unit_identifier?.trim()
+  const addr = unit?.address?.trim()
+  if (id && addr) return `${id}${separator}${addr}`
+  return id || addr || fallback
+}

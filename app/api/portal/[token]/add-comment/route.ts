@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCommentEmail } from '@/lib/email-templates'
+import { formatUnitLabel } from '@/lib/utils'
 
 export async function POST(
   req: Request,
@@ -48,7 +49,7 @@ async function sendCommentNotification(
 
   const { data: item } = await serviceSupabase
     .from('maintenance_items')
-    .select('id, item_number, title, unit:units(unit_identifier, project:projects(name))')
+    .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
     .eq('id', itemId)
     .single()
 
@@ -73,7 +74,7 @@ async function sendCommentNotification(
   const { subject, html } = contractorCommentEmail({
     itemTitle: item.title,
     itemNumber: item.item_number,
-    unitIdentifier: unit?.unit_identifier ?? '—',
+    unitLabel: formatUnitLabel(unit),
     projectName: project?.name ?? '—',
     contractorName: author,
     commentText,

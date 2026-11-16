@@ -1,13 +1,15 @@
+import { formatUnitLabel } from '@/lib/utils'
+
 export function maintenanceDueEmail(opts: {
-  upcomingUnits: { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }[]
-  overdueUnits: { unitIdentifier: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }[]
+  upcomingUnits: { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }[]
+  overdueUnits: { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }[]
   appUrl: string
 }): { subject: string; html: string } {
   const { upcomingUnits, overdueUnits, appUrl } = opts
 
   const upcomingRows = upcomingUnits.map(u => `
     <tr style="border-top: 1px solid #e9e9e7;">
-      <td style="padding: 8px 0; font-size: 14px; font-weight: 500;">${u.unitIdentifier}</td>
+      <td style="padding: 8px 12px 8px 0; font-size: 14px; font-weight: 500;">${esc(u.unitLabel)}</td>
       <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.projectName}</td>
       <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.settlementDate}</td>
       <td style="padding: 8px 0; font-size: 13px; font-weight: 600; color: ${u.daysUntilDue <= 3 ? '#eb5757' : '#d09c3a'};">${u.dueDate} (${u.daysUntilDue}d)</td>
@@ -16,7 +18,7 @@ export function maintenanceDueEmail(opts: {
 
   const overdueRows = overdueUnits.map(u => `
     <tr style="border-top: 1px solid #e9e9e7;">
-      <td style="padding: 8px 0; font-size: 14px; font-weight: 500;">${u.unitIdentifier}</td>
+      <td style="padding: 8px 12px 8px 0; font-size: 14px; font-weight: 500;">${esc(u.unitLabel)}</td>
       <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.projectName}</td>
       <td style="padding: 8px 0; font-size: 13px; color: #787774;">${u.settlementDate}</td>
       <td style="padding: 8px 0; font-size: 13px; font-weight: 600; color: #eb5757;">${u.dueDate} (${u.daysOverdue}d overdue)</td>
@@ -112,7 +114,9 @@ export function contractorNewItemsEmail(opts: {
           <td style="padding: 8px 12px 8px 0; color: #787774; font-size: 13px; white-space: nowrap; vertical-align: top;">${esc(i.itemNumber)}</td>
           <td style="padding: 8px 12px 8px 0; vertical-align: top;">${esc(i.title)}</td>
           <td style="padding: 8px 0; color: #787774; font-size: 13px; vertical-align: top;">
-            ${esc(i.unitIdentifier ?? '—')}${i.address ? `<br>${esc(i.address)}` : ''}
+            ${i.unitIdentifier?.trim() && i.address?.trim()
+              ? `${esc(i.unitIdentifier.trim())}<br>${esc(i.address.trim())}`
+              : esc(formatUnitLabel({ unit_identifier: i.unitIdentifier, address: i.address }))}
           </td>
         </tr>
       `).join('')}
@@ -127,7 +131,7 @@ export function contractorNewItemsEmail(opts: {
     ...Array.from(byProject.entries()).flatMap(([project, list]) => [
       '',
       project,
-      ...list.map(i => `  ${i.itemNumber}  ${i.title}${i.unitIdentifier ? `  (${i.unitIdentifier}${i.address ? `, ${i.address}` : ''})` : ''}`),
+      ...list.map(i => `  ${i.itemNumber}  ${i.title}${i.unitIdentifier?.trim() || i.address?.trim() ? `  (${formatUnitLabel({ unit_identifier: i.unitIdentifier, address: i.address }, '', ', ')})` : ''}`),
     ]),
     '',
     'Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.',
@@ -164,24 +168,25 @@ export function contractorNewItemsEmail(opts: {
 export function contractorCompleteEmail(opts: {
   itemTitle: string
   itemNumber: string
-  unitIdentifier: string
+  /** Pre-formatted with formatUnitLabel (unit number + address). */
+  unitLabel: string
   projectName: string
   contractorName: string
   appUrl: string
   itemId: string
 }): { subject: string; html: string } {
-  const { itemTitle, itemNumber, unitIdentifier, projectName, contractorName, appUrl, itemId } = opts
+  const { itemTitle, itemNumber, unitLabel, projectName, contractorName, appUrl, itemId } = opts
   return {
-    subject: `Ready for inspection — ${itemNumber} ${itemTitle}`,
+    subject: `Ready for inspection — ${itemNumber} ${itemTitle} (${unitLabel})`,
     html: `
       <div style="font-family: -apple-system, sans-serif; max-width: 600px; color: #37352f;">
         <h2 style="margin-bottom: 4px;">Work Ready for Inspection</h2>
-        <p style="color: #787774; margin-top: 0;">${projectName} · Unit ${unitIdentifier}</p>
+        <p style="color: #787774; margin-top: 0;">${projectName} · ${unitLabel}</p>
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
         <p><strong>${contractorName}</strong> has marked the following item as complete and ready for your inspection:</p>
         <div style="background: #f7f7f5; border-radius: 6px; padding: 14px 18px; margin: 16px 0;">
           <p style="margin: 0 0 4px; font-weight: 600;">${itemNumber} — ${itemTitle}</p>
-          <p style="margin: 0; color: #787774; font-size: 13px;">Unit ${unitIdentifier} · ${projectName}</p>
+          <p style="margin: 0; color: #787774; font-size: 13px;">${unitLabel} · ${projectName}</p>
         </div>
         <a href="${appUrl}/maintenance/${itemId}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin-top: 8px;">View Item</a>
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 24px 0;" />
@@ -194,20 +199,21 @@ export function contractorCompleteEmail(opts: {
 export function contractorCommentEmail(opts: {
   itemTitle: string
   itemNumber: string
-  unitIdentifier: string
+  /** Pre-formatted with formatUnitLabel (unit number + address). */
+  unitLabel: string
   projectName: string
   contractorName: string
   commentText: string
   appUrl: string
   itemId: string
 }): { subject: string; html: string } {
-  const { itemTitle, itemNumber, unitIdentifier, projectName, contractorName, commentText, appUrl, itemId } = opts
+  const { itemTitle, itemNumber, unitLabel, projectName, contractorName, commentText, appUrl, itemId } = opts
   return {
-    subject: `New comment from ${contractorName} — ${itemNumber}`,
+    subject: `New comment from ${contractorName} — ${itemNumber} (${unitLabel})`,
     html: `
       <div style="font-family: -apple-system, sans-serif; max-width: 600px; color: #37352f;">
         <h2 style="margin-bottom: 4px;">New Contractor Comment</h2>
-        <p style="color: #787774; margin-top: 0;">${projectName} · Unit ${unitIdentifier}</p>
+        <p style="color: #787774; margin-top: 0;">${projectName} · ${unitLabel}</p>
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
         <p><strong>${contractorName}</strong> left a comment on <strong>${itemNumber} — ${itemTitle}</strong>:</p>
         <blockquote style="margin: 0; padding: 12px 16px; background: #f7f7f5; border-left: 3px solid #e9e9e7; border-radius: 0 6px 6px 0; white-space: pre-wrap; font-size: 14px;">${commentText}</blockquote>
@@ -221,8 +227,8 @@ export function reportEmail(opts: {
   reportTitle: string
   periodLabel: string
   stats: { label: string; value: number; color?: string }[]
-  overdueItems: { title: string; itemNumber: string; unitIdentifier: string; projectName: string; daysSince: number }[]
-  recentlyCompleted: { title: string; itemNumber: string; unitIdentifier: string; projectName: string }[]
+  overdueItems: { title: string; itemNumber: string; unitLabel: string; projectName: string; daysSince: number }[]
+  recentlyCompleted: { title: string; itemNumber: string; unitLabel: string; projectName: string }[]
   appUrl: string
 }): { subject: string; html: string } {
   const { reportTitle, periodLabel, stats, overdueItems, recentlyCompleted, appUrl } = opts
@@ -239,7 +245,7 @@ export function reportEmail(opts: {
     : overdueItems.map(i => `
       <tr style="border-top: 1px solid #e9e9e7;">
         <td style="padding: 8px 0; font-size: 14px;">${i.itemNumber} — ${i.title}</td>
-        <td style="padding: 8px 0; font-size: 13px; color: #787774;">${i.projectName} · ${i.unitIdentifier}</td>
+        <td style="padding: 8px 0; font-size: 13px; color: #787774;">${i.projectName} · ${i.unitLabel}</td>
         <td style="padding: 8px 0; font-size: 13px; color: #eb5757; text-align: right;">${i.daysSince}d</td>
       </tr>
     `).join('')
@@ -249,7 +255,7 @@ export function reportEmail(opts: {
     : recentlyCompleted.map(i => `
       <tr style="border-top: 1px solid #e9e9e7;">
         <td style="padding: 8px 0; font-size: 14px;">${i.itemNumber} — ${i.title}</td>
-        <td style="padding: 8px 0; font-size: 13px; color: #787774;">${i.projectName} · ${i.unitIdentifier}</td>
+        <td style="padding: 8px 0; font-size: 13px; color: #787774;">${i.projectName} · ${i.unitLabel}</td>
       </tr>
     `).join('')
 

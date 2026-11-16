@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, formatUnitLabel } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, MapPin, Camera, Calendar } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
 import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
@@ -238,7 +238,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
   const workOrderGroups = useMemo(() => {
     const projectMap = new Map<string, {
       project: { id: string; name: string }
-      wos: Map<string, { wo: any; count: number }>
+      wos: Map<string, { wo: any; count: number; units: Set<string> }>
     }>()
 
     for (const item of items) {
@@ -247,8 +247,10 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
       if (!p || !wo) continue
       if (!projectMap.has(p.id)) projectMap.set(p.id, { project: p, wos: new Map() })
       const proj = projectMap.get(p.id)!
-      if (!proj.wos.has(wo.id)) proj.wos.set(wo.id, { wo, count: 0 })
-      proj.wos.get(wo.id)!.count++
+      if (!proj.wos.has(wo.id)) proj.wos.set(wo.id, { wo, count: 0, units: new Set() })
+      const entry = proj.wos.get(wo.id)!
+      entry.count++
+      entry.units.add(formatUnitLabel(item.unit, ''))
     }
 
     return Array.from(projectMap.values()).map(proj => ({
@@ -291,7 +293,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     if (status === 'contractor_complete') {
       const item = items.find(i => i.id === itemId)
       const hasAfter = (item?.attachments ?? []).some((a: any) => a.photo_type === 'after')
-      if (!hasAfter && !confirm('You haven’t added a completion photo yet. Mark complete without one?')) return
+      const ref = item ? `${item.item_number} (${formatUnitLabel(item.unit, 'unknown unit')})` : 'this item'
+      if (!hasAfter && !confirm(`You haven’t added a completion photo for ${ref} yet. Mark complete without one?`)) return
     }
     setSubmitting(prev => ({ ...prev, [itemId]: true }))
     await fetch(`/api/portal/${token}/update-status`, {
@@ -404,7 +407,12 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                       {units.map(({ unit, items: unitItems }) => {
                         const isUnitOpen = expandedUnits.has(unit.id)
                         const hasOwners = unit.owners?.length > 0
-                        const hasAddress = !!unit.address
+                        // Heading is the unit number; projects without unit numbers (e.g. Karori)
+                        // use the street address as the heading instead of a blank one.
+                        const unitNumber: string = unit.unit_identifier?.trim() ?? ''
+                        const unitAddress: string = unit.address?.trim() ?? ''
+                        const unitHeading = unitNumber || unitAddress || 'Unit'
+                        const hasAddress = !!unitAddress && !!unitNumber && unitAddress !== unitNumber
 
                         return (
                           <div key={unit.id} style={{ border: '1px solid #e9e9e7', borderRadius: 8, overflow: 'hidden', background: 'white' }}>
@@ -416,7 +424,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                               <div style={{ flex: 1 }}>
                                 {/* Unit identifier + item count */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: hasOwners || hasAddress ? 6 : 0 }}>
-                                  <span style={{ fontSize: 15, fontWeight: 700, color: '#37352f' }}>{unit.unit_identifier}</span>
+                                  <span style={{ fontSize: 15, fontWeight: 700, color: '#37352f' }}>{unitHeading}</span>
                                   <span style={{
                                     fontSize: 11, fontWeight: 500, color: '#787774',
                                     background: '#f0f0ee', borderRadius: 10, padding: '2px 8px',
@@ -430,7 +438,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                     {hasOwners && unit.owners.map((o: any, i: number) => (
                                       // get_portal_items returns owners without an id
-                                      <div key={`${i}-${o.name}`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#37352f' }}>
+                                      <div key={`${i}-${o.name}`} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 13, color: '#37352f' }}>
                                         <User size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />
                                         <span>{o.name}</span>
                                         {o.phone && (
@@ -439,12 +447,24 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                             <span>{o.phone}</span>
                                           </>
                                         )}
+                                        {o.email && (
+                                          <>
+                                            <Mail size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
+                                            <a
+                                              href={`mailto:${o.email}`}
+                                              onClick={e => e.stopPropagation()}
+                                              style={{ color: '#2f6fcf', textDecoration: 'none', overflowWrap: 'anywhere' }}
+                                            >
+                                              {o.email}
+                                            </a>
+                                          </>
+                                        )}
                                       </div>
                                     ))}
                                     {hasAddress && (
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#787774' }}>
                                         <MapPin size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />
-                                        <span>{unit.address}</span>
+                                        <span>{unitAddress}</span>
                                       </div>
                                     )}
                                   </div>
@@ -509,7 +529,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {wos.map(({ wo, count }) => {
+                  {wos.map(({ wo, count, units: woUnits }) => {
+                    const unitLabels = Array.from(woUnits).filter(Boolean)
                     const style = WO_STATUS_STYLE[wo.status] ?? WO_STATUS_STYLE.draft
                     return (
                       <div
@@ -525,6 +546,12 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                           <div style={{ fontSize: 12, color: '#a0a09e', marginTop: 2 }}>
                             {count} item{count !== 1 ? 's' : ''}
                           </div>
+                          {unitLabels.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, color: '#787774', marginTop: 4 }}>
+                              <MapPin size={12} style={{ color: '#a0a09e', flexShrink: 0, marginTop: 2 }} />
+                              <span>{unitLabels.join('; ')}</span>
+                            </div>
+                          )}
                         </div>
                         <span style={{
                           fontSize: 12, fontWeight: 500, padding: '3px 8px', borderRadius: 4,

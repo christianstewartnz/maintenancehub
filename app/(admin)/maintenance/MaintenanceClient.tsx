@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { getDaysSince, getAgeClass, formatDate } from '@/lib/utils'
+import { getDaysSince, getAgeClass, formatDate, formatUnitLabel } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
 import type { MaintenanceItem, MaintenanceStatus, Profile } from '@/lib/types'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
@@ -106,7 +106,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       const unit = (item.unit as any)
       if (unit?.id && (unit?.project?.id === filterProject || unit?.project_id === filterProject) && !seen.has(unit.id)) {
         seen.add(unit.id)
-        result.push({ id: unit.id, label: unit.unit_identifier ?? unit.address ?? 'Unnamed unit' })
+        result.push({ id: unit.id, label: formatUnitLabel(unit, 'Unnamed unit') })
       }
     }
     return result.sort((a, b) => a.label.localeCompare(b.label))
@@ -116,7 +116,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     let result = [...items]
     if (search) {
       const q = search.toLowerCase()
-      result = result.filter(i => i.title?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q) || i.item_number?.toLowerCase().includes(q))
+      result = result.filter(i => i.title?.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q) || i.item_number?.toLowerCase().includes(q)
+        || (i.unit as any)?.unit_identifier?.toLowerCase().includes(q) || (i.unit as any)?.address?.toLowerCase().includes(q))
     }
     if (filterProject) result = result.filter(i => (i.unit as any)?.project?.id === filterProject)
     if (filterUnit) result = result.filter(i => (i.unit as any)?.id === filterUnit)

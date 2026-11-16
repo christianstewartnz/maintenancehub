@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit'
+import { formatUnitLabel } from './utils'
 
 export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promise<Buffer> {
   const project = workOrder.project as any
@@ -68,11 +69,11 @@ export async function generateWorkOrderPDF(workOrder: any, items: any[]): Promis
 
       if (unit) {
         doc.fontSize(10).fillColor(GRAY)
-        const unitLine = unit.lot_number
-          ? `Construction No. ${unit.unit_identifier} · Lot ${unit.lot_number}`
-          : `Construction No. ${unit.unit_identifier}`
-        doc.text(unitLine, { indent: 12 })
-        if (unit.address) doc.text(`Address: ${unit.address}`, { indent: 12 })
+        // Unit number + street address (address alone for projects without unit numbers, e.g. Karori)
+        const unitLine = [formatUnitLabel(unit, ''), unit.lot_number ? `Lot ${unit.lot_number}` : '']
+          .filter(Boolean)
+          .join(' · ')
+        if (unitLine) doc.text(`Unit: ${unitLine}`, { indent: 12 })
         if (unit.owners?.length) {
           for (const owner of unit.owners) {
             doc.text(

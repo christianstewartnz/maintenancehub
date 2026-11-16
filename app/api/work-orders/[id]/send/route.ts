@@ -70,8 +70,8 @@ export async function POST(
     html += `
       <tr style="border-top: 1px solid #e9e9e7;">
         <td style="padding: 10px 0; vertical-align: top; width: 50%;">
-          <strong>${unit?.unit_identifier ?? '—'}</strong>
-          ${unit?.address ? `<br><span style="color:#787774">${unit.address}</span>` : ''}
+          <strong>${unit?.unit_identifier || unit?.address || '—'}</strong>
+          ${unit?.unit_identifier && unit?.address ? `<br><span style="color:#787774">${unit.address}</span>` : ''}
         </td>
         <td style="padding: 10px 0; vertical-align: top; color: #787774; font-size: 13px;">
           ${unit?.owners?.length ? unit.owners.map((o: any) => `Owner: ${o.name}${o.phone ? ` · ${o.phone}` : ''}`).join('<br>') + '<br>' : ''}
