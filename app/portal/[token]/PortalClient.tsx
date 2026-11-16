@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime, formatUnitLabel } from '@/lib/utils'
+import { formatDateTime, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2 } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
 import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
@@ -62,8 +62,9 @@ function ItemRow({
   isStatusSubmitting, isCommentSubmitting, isDateSubmitting,
 }: ItemProps) {
   const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
+  const isDone = item.status === 'contractor_complete' || item.status === 'complete'
   return (
-    <div style={{ border: '1px solid #e9e9e7', borderRadius: 6, overflow: 'hidden', background: 'white' }}>
+    <div className={`unit-card${isDone ? ' unit-card--done' : ''}`} style={{ borderRadius: 6, overflow: 'hidden' }}>
       {/* Row */}
       <div
         onClick={onToggle}
@@ -226,9 +227,12 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
       proj.units.get(u.id)!.items.push(item)
     }
 
+    // Units with work still to do first; fully contractor-complete units drop to the bottom
     return Array.from(projectMap.values()).map(proj => ({
       ...proj,
-      units: Array.from(proj.units.values()),
+      units: Array.from(proj.units.values())
+        .map(u => ({ ...u, summary: summariseUnitItems(u.items) }))
+        .sort((a, b) => Number(a.summary.state === 'done') - Number(b.summary.state === 'done')),
     }))
   }, [items, filterStatus])
 
@@ -388,7 +392,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
               </div>
             ) : (
               grouped.map(({ project, units }) => {
-                const projectTotal = units.reduce((s, u) => s + u.items.length, 0)
+                const projectOutstanding = units.reduce((s, u) => s + u.summary.outstanding, 0)
+                const projectDone = units.reduce((s, u) => s + u.summary.done, 0)
                 return (
                   <div key={project.id} style={{ marginBottom: 32 }}>
                     {/* Project header */}
@@ -397,14 +402,19 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                       {(project as any).development_company && (
                         <div style={{ fontSize: 13, color: '#787774', marginTop: 2 }}>{(project as any).development_company}</div>
                       )}
-                      <span style={{ fontSize: 12, color: '#a0a09e' }}>
-                        {projectTotal} open item{projectTotal !== 1 ? 's' : ''}
-                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', fontSize: 12, marginTop: 2 }}>
+                        {projectOutstanding > 0 && (
+                          <span className="unit-count-outstanding">{projectOutstanding} outstanding</span>
+                        )}
+                        {projectDone > 0 && (
+                          <span className="unit-count-done">{projectDone} complete, awaiting sign-off</span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Units */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {units.map(({ unit, items: unitItems }) => {
+                      {units.map(({ unit, items: unitItems, summary }) => {
                         const isUnitOpen = expandedUnits.has(unit.id)
                         const hasOwners = unit.owners?.length > 0
                         // Heading is the unit number; projects without unit numbers (e.g. Karori)
@@ -415,22 +425,34 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                         const hasAddress = !!unitAddress && !!unitNumber && unitAddress !== unitNumber
 
                         return (
-                          <div key={unit.id} style={{ border: '1px solid #e9e9e7', borderRadius: 8, overflow: 'hidden', background: 'white' }}>
+                          <div key={unit.id} className={`unit-card unit-card--${summary.state}`} style={{ borderRadius: 8, overflow: 'hidden' }}>
                             {/* Unit header — click to expand/collapse */}
                             <div
                               onClick={() => toggleUnit(unit.id)}
                               style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start' }}
                             >
                               <div style={{ flex: 1 }}>
-                                {/* Unit identifier + item count */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: hasOwners || hasAddress ? 6 : 0 }}>
+                                {/* Unit identifier */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  {summary.state === 'done' && <CheckCircle2 size={16} className="unit-count-done" style={{ flexShrink: 0 }} />}
                                   <span style={{ fontSize: 15, fontWeight: 700, color: '#37352f' }}>{unitHeading}</span>
-                                  <span style={{
-                                    fontSize: 11, fontWeight: 500, color: '#787774',
-                                    background: '#f0f0ee', borderRadius: 10, padding: '2px 8px',
-                                  }}>
-                                    {unitItems.length} item{unitItems.length !== 1 ? 's' : ''}
-                                  </span>
+                                </div>
+
+                                {/* Outstanding vs completed counts, one line each */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, fontWeight: 500, margin: `4px 0 ${hasOwners || hasAddress ? 6 : 0}px` }}>
+                                  {summary.outstanding > 0 && (
+                                    <span className="unit-count-outstanding" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                      <Clock size={12} /> {summary.outstanding} outstanding
+                                    </span>
+                                  )}
+                                  {summary.done > 0 && (
+                                    <span className="unit-count-done" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                      <CheckCircle2 size={12} />
+                                      {summary.state === 'done'
+                                        ? `${summary.done === 1 ? '1 item' : `All ${summary.done} items`} complete · awaiting sign-off`
+                                        : `${summary.done} complete`}
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Owner / access details — always visible on the unit row */}
@@ -478,7 +500,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
 
                             {/* Maintenance items — shown when unit is expanded */}
                             {isUnitOpen && (
-                              <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 8, background: '#fafafa' }}>
+                              <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.015)' }}>
                                 {unitItems.map((item: any) => (
                                   <ItemRow
                                     key={item.id}

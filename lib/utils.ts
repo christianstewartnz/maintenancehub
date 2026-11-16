@@ -35,6 +35,29 @@ export function getAgeClass(createdAt: string, amberDays = 7, redDays = 14) {
   return ''
 }
 
+/**
+ * Row tint for an item in any table/list, shared by admin and the contractor portal:
+ * complete = green, contractor complete = light green, otherwise the age (SLA) tint.
+ */
+export function getItemRowClass(item: { status: MaintenanceStatus | string; created_at: string }, amberDays = 7, redDays = 14) {
+  if (item.status === 'complete') return 'row-complete'
+  if (item.status === 'contractor_complete') return 'row-contractor-complete'
+  return getAgeClass(item.created_at, amberDays, redDays)
+}
+
+/**
+ * Splits a unit's items into what the contractor still has to do vs what they've finished.
+ * `state` drives the colour of the unit card: 'done' (all contractor complete or complete),
+ * 'partial' (some finished) or 'open' (nothing finished yet).
+ */
+export function summariseUnitItems(items: { status: MaintenanceStatus | string }[]) {
+  const done = items.filter(i => i.status === 'contractor_complete' || i.status === 'complete').length
+  const outstanding = items.length - done
+  const state: 'open' | 'partial' | 'done' =
+    items.length > 0 && outstanding === 0 ? 'done' : done > 0 ? 'partial' : 'open'
+  return { outstanding, done, state }
+}
+
 export const STATUS_LABELS: Record<MaintenanceStatus, string> = {
   logged: 'Logged',
   assigned: 'Assigned',
@@ -47,7 +70,7 @@ export const STATUS_COLORS: Record<MaintenanceStatus, string> = {
   logged: 'badge-gray',
   assigned: 'badge-blue',
   in_progress: 'badge-amber',
-  contractor_complete: 'badge-orange',
+  contractor_complete: 'badge-green-light',
   complete: 'badge-green',
 }
 

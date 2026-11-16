@@ -55,6 +55,19 @@ body {
 .row-complete td,
 .data-table tbody tr.row-complete:hover td { background-color: #dcf0dc !important; }
 
+/* Contractor complete (awaiting sign-off): lighter green, also overrides age tint */
+.row-contractor-complete,
+.row-contractor-complete td,
+.data-table tbody tr.row-contractor-complete:hover td { background-color: #eef8ee !important; }
+
+/* ── Unit progress cards (portal + dashboard) ───────────────────────── */
+/* partial = some items contractor complete; done = every item contractor complete */
+.unit-card { background: white; border: 1px solid #e9e9e7; }
+.unit-card--partial { border-color: #f2d58a; }
+.unit-card--done { background: #eef8ee; border-color: #b7dfb4; }
+.unit-count-outstanding { color: #9a6700; }
+.unit-count-done { color: #1d6a38; }
+
 /* ── Sidebar ────────────────────────────────────────────────────────── */
 .sidebar {
   width: 240px;

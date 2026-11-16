@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X, Mail } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate, formatUnitLabel } from '@/lib/utils'
+import { formatDate, formatUnitLabel, getItemRowClass } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Contractor } from '@/lib/types'
@@ -111,7 +111,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
             <thead><tr><th>#</th><th>Title</th><th>Project</th><th>Unit</th><th>Status</th><th>Age</th></tr></thead>
             <tbody>
               {openItems.map((item: any) => (
-                <tr key={item.id}>
+                <tr key={item.id} className={getItemRowClass(item)}>
                   <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
                   <td>
                     <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link>

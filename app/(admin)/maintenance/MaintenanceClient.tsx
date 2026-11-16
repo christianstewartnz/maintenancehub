@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCheck, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { getDaysSince, getAgeClass, formatDate, formatUnitLabel } from '@/lib/utils'
+import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
 import type { MaintenanceItem, MaintenanceStatus, Profile } from '@/lib/types'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
@@ -346,7 +346,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
               {filtered.map(item => {
                 const days = getDaysSince(item.created_at)
                 const isComplete = item.status === 'complete'
-                const ageClass = isComplete ? 'row-complete' : getAgeClass(item.created_at)
+                const ageClass = getItemRowClass(item)
                 const unit = item.unit as any
                 return (
                   <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : undefined}>

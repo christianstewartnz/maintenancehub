@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, ChevronRight, AlertTriangle, Clock, CalendarDays, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { ChevronDown, ChevronRight, AlertTriangle, Clock, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { getDaysSince, getAgeClass, formatUnitLabel } from '@/lib/utils'
+import { getDaysSince, getItemRowClass, summariseUnitItems, formatUnitLabel } from '@/lib/utils'
 import type { Project, MaintenanceItem, MaintenanceStatus } from '@/lib/types'
 
 const AMBER_DAYS = 7
@@ -435,7 +435,9 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
       if (!unitMap.has(unit.id)) unitMap.set(unit.id, { unitId: unit.id, unitIdentifier: unit.unit_identifier, address: unit.address, items: [] })
       unitMap.get(unit.id)!.items.push(item)
     }
-    const units = Array.from(unitMap.values()).sort((a, b) => (a.unitIdentifier ?? a.address ?? '').localeCompare(b.unitIdentifier ?? b.address ?? ''))
+    const units = Array.from(unitMap.values())
+      .map(u => ({ ...u, summary: summariseUnitItems(u.items) }))
+      .sort((a, b) => (a.unitIdentifier ?? a.address ?? '').localeCompare(b.unitIdentifier ?? b.address ?? ''))
     const overdueCount = projectItems.filter(i => getDaysSince(i.created_at) >= RED_DAYS).length
     const awaitingConfirm = projectItems.filter(i => i.status === 'contractor_complete').length
     return { project, units, totalOpen: projectItems.length, overdueCount, awaitingConfirm }
@@ -525,15 +527,23 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
                   {units.length === 0 ? (
                     <p style={{ padding: '12px 20px', color: '#787774', fontSize: 14 }}>No items match current filter.</p>
                   ) : units.map(unit => (
-                    <div key={unit.unitId} style={{ borderTop: '1px solid #f1f1ef' }}>
+                    <div
+                      key={unit.unitId}
+                      className={unit.summary.state === 'done' ? 'unit-card--done' : undefined}
+                      style={{ borderTop: '1px solid #f1f1ef', borderLeft: unit.summary.state === 'partial' ? '3px solid #f2d58a' : '3px solid transparent' }}
+                    >
                       <button
                         onClick={() => toggleUnit(unit.unitId)}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px 10px 17px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                       >
                         {expandedUnits.has(unit.unitId) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        {unit.summary.state === 'done' && <CheckCircle2 size={14} className="unit-count-done" />}
                         <span style={{ fontWeight: 500, color: '#37352f' }}>{unit.unitIdentifier ?? unit.address ?? 'Unnamed unit'}</span>
                         {unit.unitIdentifier && unit.address && <span style={{ color: '#787774', fontSize: 13 }}>{unit.address}</span>}
-                        <span style={{ marginLeft: 'auto', fontSize: 13, color: '#787774' }}>{unit.items.length} item{unit.items.length !== 1 ? 's' : ''}</span>
+                        <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 13, fontWeight: 500 }}>
+                          {unit.summary.outstanding > 0 && <span className="unit-count-outstanding">{unit.summary.outstanding} outstanding</span>}
+                          {unit.summary.done > 0 && <span className="unit-count-done">{unit.summary.done} to confirm</span>}
+                        </span>
                       </button>
 
                       {expandedUnits.has(unit.unitId) && (
@@ -546,7 +556,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
                               {unit.items.map(item => {
                                 const days = getDaysSince(item.created_at)
                                 return (
-                                  <tr key={item.id} className={getAgeClass(item.created_at, AMBER_DAYS, RED_DAYS)}>
+                                  <tr key={item.id} className={getItemRowClass(item, AMBER_DAYS, RED_DAYS)}>
                                     <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
                                     <td>
                                       <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>{item.title}</Link>
