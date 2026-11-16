@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import SettingsClient from './SettingsClient'
 import ProfileNameCard from './ProfileNameCard'
+import { senderAddress } from '@/lib/mailer'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -14,7 +15,7 @@ export default async function SettingsPage() {
       .from('notification_preferences')
       .select('*')
       .eq('user_id', user.id)
-      .single(),
+      .maybeSingle(),
     supabase
       .from('projects')
       .select('id, name, address, description, status, development_company, created_at, updated_at')
@@ -34,6 +35,8 @@ export default async function SettingsPage() {
         <SettingsClient
           prefs={prefs}
           userId={user.id}
+          loginEmail={user.email ?? null}
+          senderEmail={senderAddress()}
           projects={projects ?? []}
         />
       </div>

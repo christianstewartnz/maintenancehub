@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCompleteEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
+import { getRecipients } from '@/lib/notify-recipients'
 
 export async function POST(
   req: Request,
@@ -50,17 +51,9 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
 
   if (!item) return
 
-  const { data: prefs } = await serviceSupabase
-    .from('notification_preferences')
-    .select('contractor_complete_email, user_id')
-    .eq('contractor_complete_email', true)
-    .limit(1)
-    .single()
-
-  if (!prefs) return
-
-  const { data: { user } } = await serviceSupabase.auth.admin.getUserById(prefs.user_id)
-  if (!user?.email) return
+  // Every user who has "Work ready for inspection" switched on.
+  const recipients = await getRecipients(serviceSupabase, 'contractor_complete_email')
+  if (!recipients.length) return
 
   const unit = item.unit as any
   const contractor = item.contractor as any
@@ -77,5 +70,5 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
     itemId: item.id,
   })
 
-  await sendEmail({ to: user.email, subject, html })
+  await Promise.all(recipients.map(r => sendEmail({ to: r.email, subject, html })))
 }

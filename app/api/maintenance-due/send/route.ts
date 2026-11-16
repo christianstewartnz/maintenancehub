@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { maintenanceDueEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
+import { getRecipients } from '@/lib/notify-recipients'
 
 // Called daily by Vercel cron: POST /api/maintenance-due/send
 // Sends an alert email when units have their 90-day maintenance form due within 14 days or overdue.
@@ -12,7 +13,7 @@ export async function POST(req: Request) {
   }
 
   if (!isEmailConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: 'Missing email settings (SMTP_HOST or RESEND_API_KEY) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
+    return Response.json({ error: 'Missing email settings (SMTP_HOST) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
   }
 
   const serviceSupabase = createClient(
@@ -65,31 +66,16 @@ export async function POST(req: Request) {
   upcomingUnits.sort((a, b) => a.daysUntilDue - b.daysUntilDue)
   overdueUnits.sort((a, b) => b.daysOverdue - a.daysOverdue)
 
-  // Find the admin email — use the first user with notification preferences, or fall back to any user
-  let adminEmail: string | undefined
-  const { data: prefRows } = await serviceSupabase
-    .from('notification_preferences')
-    .select('user_id')
-    .limit(1)
-
-  if (prefRows?.length) {
-    const { data: { user } } = await serviceSupabase.auth.admin.getUserById(prefRows[0].user_id)
-    adminEmail = user?.email
-  }
-
-  if (!adminEmail) {
-    const { data: { users } } = await serviceSupabase.auth.admin.listUsers({ perPage: 1 })
-    adminEmail = users?.[0]?.email
-  }
-
-  if (!adminEmail) return Response.json({ error: 'Could not determine admin email' }, { status: 500 })
+  // Every user who has the maintenance-due alert switched on.
+  const recipients = await getRecipients(serviceSupabase, 'maintenance_due_email')
+  if (!recipients.length) return Response.json({ sent: false, reason: 'no users have the maintenance-due alert switched on' })
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
   const { subject, html } = maintenanceDueEmail({ upcomingUnits, overdueUnits, appUrl })
-  await sendEmail({ to: adminEmail, subject, html })
+  const results = await Promise.all(recipients.map(r => sendEmail({ to: r.email, subject, html })))
 
-  return Response.json({ sent: true, upcoming: upcomingUnits.length, overdue: overdueUnits.length })
+  return Response.json({ sent: results.filter(r => !r.error).length, upcoming: upcomingUnits.length, overdue: overdueUnits.length })
 }
 
 // Vercel Cron invokes routes with GET

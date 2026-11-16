@@ -101,6 +101,8 @@ export interface MaintenanceItem {
   assigned_to: string | null
   /** When the contractor was last emailed (or marked as told) about this item; null = not yet. */
   contractor_notified_at: string | null
+  /** When the item was archived; null = active. Archived items are hidden from lists, counts and the portal. */
+  archived_at: string | null
   unit?: Unit & { project?: Project }
   trade?: Trade
   contractor?: Contractor
@@ -167,6 +169,9 @@ export interface NotificationPreferences {
   user_id: string
   contractor_complete_email: boolean
   contractor_comment_email: boolean
+  maintenance_due_email: boolean
+  /** Where this user's notifications go; null = their login email. */
+  notify_email: string | null
   report_frequency: ReportFrequency
   report_scope: ReportScope
   report_projects: string[]

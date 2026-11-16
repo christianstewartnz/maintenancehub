@@ -2,8 +2,11 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { reportEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
+import { resolve } from '@/lib/notify-recipients'
 
-// Called by Vercel cron or manually: POST /api/reports/send
+// Called daily by Vercel cron (or manually): POST /api/reports/send
+// Daily-report users get one every run; weekly-report users only on the Sunday-UTC run (Monday morning NZ).
+// Pass ?all=1 to send to weekly users on any day.
 // Requires Bearer token matching CRON_SECRET env var
 export async function POST(req: Request) {
   const auth = req.headers.get('authorization')
@@ -12,7 +15,7 @@ export async function POST(req: Request) {
   }
 
   if (!isEmailConfigured() || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: 'Missing email settings (SMTP_HOST or RESEND_API_KEY) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
+    return Response.json({ error: 'Missing email settings (SMTP_HOST) or SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 })
   }
 
   const serviceSupabase = createClient(
@@ -23,19 +26,20 @@ export async function POST(req: Request) {
   // Find all users with a report preference (not 'none')
   const { data: prefRows } = await serviceSupabase
     .from('notification_preferences')
-    .select('user_id, report_frequency, report_scope, report_projects')
+    .select('*')
     .neq('report_frequency', 'none')
 
-  if (!prefRows?.length) return Response.json({ sent: 0 })
-
   const now = new Date()
+  const weeklyDay = now.getUTCDay() === 0 || new URL(req.url).searchParams.get('all') === '1'
+  const due = (prefRows ?? []).filter(p => p.report_frequency === 'daily' || weeklyDay)
+  if (!due.length) return Response.json({ sent: 0 })
+  const recipients = await resolve(serviceSupabase, due)
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
   let sent = 0
 
-  for (const prefs of prefRows) {
-    const { data: { user } } = await serviceSupabase.auth.admin.getUserById(prefs.user_id)
-    if (!user?.email) continue
+  for (const { email, prefs } of recipients) {
 
     // Determine period start
     const periodDays = prefs.report_frequency === 'daily' ? 1 : 7
@@ -48,6 +52,7 @@ export async function POST(req: Request) {
     let query = serviceSupabase
       .from('maintenance_items')
       .select('id, item_number, title, status, created_at, completed_at, unit:units(unit_identifier, address, project:projects(id, name))')
+      .is('archived_at', null)
 
     if (prefs.report_scope === 'per_project' && prefs.report_projects?.length > 0) {
       // Filter to specific projects via units
@@ -112,8 +117,8 @@ export async function POST(req: Request) {
       appUrl,
     })
 
-    await sendEmail({ to: user.email, subject, html })
-    sent++
+    const { error } = await sendEmail({ to: email, subject, html })
+    if (!error) sent++
   }
 
   return Response.json({ sent })

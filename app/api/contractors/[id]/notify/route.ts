@@ -47,6 +47,7 @@ export async function POST(
     .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
     .eq('contractor_id', id)
     .is('contractor_notified_at', null)
+    .is('archived_at', null)
     .not('status', 'in', NOT_PENDING_FILTER)
     .order('created_at')
   if (onlyIds) query = query.in('id', onlyIds)
@@ -62,7 +63,7 @@ export async function POST(
       return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
     }
     if (!isEmailConfigured()) {
-      return Response.json({ error: 'Email sending is not configured (set SMTP_HOST or RESEND_API_KEY)' }, { status: 500 })
+      return Response.json({ error: 'Email sending is not configured (set SMTP_HOST on the server)' }, { status: 500 })
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
@@ -81,8 +82,8 @@ export async function POST(
       })),
     })
 
-    // Replies go to whoever clicked Notify; RESEND_REPLY_TO is a fallback for users without an email.
-    const replyTo = user.email ?? process.env.RESEND_REPLY_TO
+    // Replies go to whoever clicked Notify; EMAIL_REPLY_TO is a fallback for users without an email.
+    const replyTo = user.email ?? process.env.EMAIL_REPLY_TO
     const { error: emailError } = await sendEmail({ to: contractor.email, replyTo, subject, html, text })
     if (emailError) return Response.json({ error: emailError }, { status: 500 })
   }

@@ -1,13 +1,12 @@
 import nodemailer, { type Transporter } from 'nodemailer'
-import { Resend } from 'resend'
 import { format } from 'node:util'
 
 /**
  * Single place the app sends email from.
  *
- * Uses SMTP when SMTP_HOST is set (SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS,
- * SMTP_FROM), otherwise falls back to Resend (RESEND_API_KEY, RESEND_FROM_EMAIL).
- * The display name is always "Stratum Maintenance Hub".
+ * Sends through the SMTP server only (SMTP_HOST, SMTP_PORT, SMTP_SECURE,
+ * SMTP_USER, SMTP_PASS, SMTP_FROM). The display name is always
+ * "Stratum Maintenance Hub".
  */
 
 export const SENDER_NAME = 'Stratum Maintenance Hub'
@@ -38,7 +37,17 @@ function smtpEnabled() {
 }
 
 export function isEmailConfigured() {
-  return smtpEnabled() || !!env('RESEND_API_KEY')
+  return smtpEnabled()
+}
+
+/** Message shown when SMTP isn't set up on the server. */
+export const EMAIL_NOT_CONFIGURED = 'Email sending is not configured (set SMTP_HOST on the server)'
+
+/** The SMTP mailbox emails are sent from, or null if SMTP isn't set up. */
+export function senderAddress(): string | null {
+  if (!smtpEnabled()) return null
+  const v = env('SMTP_FROM') ?? env('SMTP_USER')
+  return v ? bareAddress(v) : null
 }
 
 /** Strip any "Name <addr>" wrapper so we can apply our own display name. */
@@ -47,8 +56,7 @@ function bareAddress(value: string) {
 }
 
 function fromHeader() {
-  const configured = (smtpEnabled() ? env('SMTP_FROM') ?? env('SMTP_USER') : env('RESEND_FROM_EMAIL'))
-    ?? 'noreply@maintenancehub.co.nz'
+  const configured = env('SMTP_FROM') ?? env('SMTP_USER') ?? 'noreply@maintenancehub.co.nz'
   return `${SENDER_NAME} <${bareAddress(configured)}>`
 }
 
@@ -100,7 +108,7 @@ function getTransporter() {
 export async function diagnoseSmtp() {
   const c = smtpConfig()
   const info = {
-    mode: smtpEnabled() ? 'smtp' : env('RESEND_API_KEY') ? 'resend' : 'none',
+    mode: smtpEnabled() ? 'smtp' : 'none',
     host: c.host ?? null,
     port: c.port,
     secure: c.secure,
@@ -177,39 +185,25 @@ export async function smtpTestSend(to: string) {
 /** Sends an email. Never throws; returns { error } on failure. */
 export async function sendEmail(opts: SendEmailOptions): Promise<{ error: string | null }> {
   if (!isEmailConfigured()) {
-    return { error: 'Email sending is not configured (set SMTP_HOST or RESEND_API_KEY)' }
+    return { error: EMAIL_NOT_CONFIGURED }
   }
-  if (smtpEnabled() && !env('SMTP_USER')) {
+  if (!env('SMTP_USER')) {
     return { error: 'SMTP login missing: SMTP_USER is not set on the server' }
   }
   const from = fromHeader()
   const replyTo = opts.replyTo || undefined
 
   try {
-    if (smtpEnabled()) {
-      await getTransporter().sendMail({
-        from,
-        to: opts.to,
-        replyTo,
-        subject: opts.subject,
-        html: opts.html,
-        text: opts.text,
-        attachments: opts.attachments,
-      })
-      return { error: null }
-    }
-
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    const { error } = await resend.emails.send({
+    await getTransporter().sendMail({
       from,
       to: opts.to,
-      ...(replyTo ? { replyTo } : {}),
+      replyTo,
       subject: opts.subject,
       html: opts.html,
-      ...(opts.text ? { text: opts.text } : {}),
-      ...(opts.attachments ? { attachments: opts.attachments.map(a => ({ filename: a.filename, content: a.content })) } : {}),
+      text: opts.text,
+      attachments: opts.attachments,
     })
-    return { error: error?.message ?? null }
+    return { error: null }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Failed to send email' }
   }

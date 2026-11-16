@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCommentEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
+import { getRecipients } from '@/lib/notify-recipients'
 
 export async function POST(
   req: Request,
@@ -55,17 +56,9 @@ async function sendCommentNotification(
 
   if (!item) return
 
-  const { data: prefs } = await serviceSupabase
-    .from('notification_preferences')
-    .select('contractor_comment_email, user_id')
-    .eq('contractor_comment_email', true)
-    .limit(1)
-    .single()
-
-  if (!prefs) return
-
-  const { data: { user } } = await serviceSupabase.auth.admin.getUserById(prefs.user_id)
-  if (!user?.email) return
+  // Every user who has "New contractor comment" switched on.
+  const recipients = await getRecipients(serviceSupabase, 'contractor_comment_email')
+  if (!recipients.length) return
 
   const unit = item.unit as any
   const project = unit?.project as any
@@ -82,5 +75,5 @@ async function sendCommentNotification(
     itemId: item.id,
   })
 
-  await sendEmail({ to: user.email, subject, html })
+  await Promise.all(recipients.map(r => sendEmail({ to: r.email, subject, html })))
 }

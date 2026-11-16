@@ -35,7 +35,7 @@ export async function POST(
   }
 
   if (!isEmailConfigured()) {
-    return Response.json({ error: 'Email sending is not configured (set SMTP_HOST or RESEND_API_KEY)' }, { status: 500 })
+    return Response.json({ error: 'Email sending is not configured (set SMTP_HOST on the server)' }, { status: 500 })
   }
 
   // Generate PDF
