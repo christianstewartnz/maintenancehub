@@ -19,10 +19,11 @@ interface Props {
   projects: { id: string; name: string }[]
   contractors: { id: string; company_name: string }[]
   users: Profile[]
+  trades: { id: string; name: string; project_id: string }[]
   currentUserId: string
 }
 
-export default function MaintenanceClient({ items: initial, projects, contractors, users, currentUserId }: Props) {
+export default function MaintenanceClient({ items: initial, projects, contractors, users, trades, currentUserId }: Props) {
   const [items, setItems] = useState(initial)
   const [showCreate, setShowCreate] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -74,6 +75,54 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       setItems(prev => prev.map(i => set.has(i.id) ? { ...i, assigned_to: assignedTo } : i))
     }
     setAssigning(false)
+  }
+
+  // Trades belong to a project, so each row only offers its own project's trades
+  const tradesByProject = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }[]>()
+    for (const t of trades) {
+      const list = map.get(t.project_id) ?? []
+      list.push(t)
+      map.set(t.project_id, list)
+    }
+    return map
+  }, [trades])
+
+  // Row ids with a trade/contractor save in flight
+  const [savingRow, setSavingRow] = useState<Set<string>>(new Set())
+  function markSaving(id: string, on: boolean) {
+    setSavingRow(prev => { const s = new Set(prev); on ? s.add(id) : s.delete(id); return s })
+  }
+
+  async function changeTrade(item: MaintenanceItem, tradeId: string | null) {
+    markSaving(item.id, true)
+    const { error } = await supabase.from('maintenance_items').update({ trade_id: tradeId }).eq('id', item.id)
+    if (error) {
+      alert(`Couldn't update trade: ${error.message}`)
+    } else {
+      const t = tradeId ? trades.find(x => x.id === tradeId) : null
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, trade_id: tradeId, trade: t ? { id: t.id, name: t.name } : null } as MaintenanceItem : i))
+    }
+    markSaving(item.id, false)
+  }
+
+  async function changeContractor(item: MaintenanceItem, contractorId: string | null) {
+    markSaving(item.id, true)
+    // Same rule as the item page: giving a logged item a contractor moves it to Assigned.
+    // Clearing the contractor on an Assigned item puts it back to Logged.
+    const status: MaintenanceStatus =
+      contractorId && item.status === 'logged' ? 'assigned'
+      : !contractorId && item.status === 'assigned' ? 'logged'
+      : item.status
+    const { error } = await supabase.from('maintenance_items').update({ contractor_id: contractorId, status }).eq('id', item.id)
+    if (error) {
+      alert(`Couldn't update contractor: ${error.message}`)
+    } else {
+      const c = contractorId ? contractors.find(x => x.id === contractorId) : null
+      // The DB trigger logs contractor/status changes to the activity feed
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, contractor_id: contractorId, status, contractor: c ? { id: c.id, company_name: c.company_name } : null } as MaintenanceItem : i))
+    }
+    markSaving(item.id, false)
   }
 
   function toggleSelected(id: string) {
@@ -414,8 +463,49 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.project?.name ?? '—'}</td>
                     <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{unit?.unit_identifier ?? '—'}</td>
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.address ?? '—'}</td>
-                    <td style={{ fontSize: 13, color: '#787774' }}>{(item.trade as any)?.name ?? '—'}</td>
-                    <td style={{ fontSize: 13, color: '#787774' }}>{(item.contractor as any)?.company_name ?? '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const tradeId = item.trade_id ?? (item.trade as any)?.id ?? ''
+                        const projectTrades = tradesByProject.get(unit?.project?.id ?? unit?.project_id) ?? []
+                        return (
+                          <select
+                            className="assignee-select"
+                            value={tradeId}
+                            onChange={e => changeTrade(item, e.target.value || null)}
+                            disabled={savingRow.has(item.id)}
+                            aria-label={`Trade for ${item.item_number}`}
+                            style={{ color: tradeId ? '#37352f' : '#b0aea8' }}
+                          >
+                            <option value="">No trade</option>
+                            {projectTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            {tradeId && !projectTrades.some(t => t.id === tradeId) && (
+                              <option value={tradeId}>{(item.trade as any)?.name ?? 'Unknown trade'}</option>
+                            )}
+                          </select>
+                        )
+                      })()}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const contractorId = item.contractor_id ?? (item.contractor as any)?.id ?? ''
+                        return (
+                          <select
+                            className="assignee-select"
+                            value={contractorId}
+                            onChange={e => changeContractor(item, e.target.value || null)}
+                            disabled={savingRow.has(item.id)}
+                            aria-label={`Contractor for ${item.item_number}`}
+                            style={{ color: contractorId ? '#37352f' : '#b0aea8' }}
+                          >
+                            <option value="">No contractor</option>
+                            {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                            {contractorId && !contractors.some(c => c.id === contractorId) && (
+                              <option value={contractorId}>{(item.contractor as any)?.company_name ?? 'Unknown contractor'}</option>
+                            )}
+                          </select>
+                        )
+                      })()}
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       <select
                         className="assignee-select"
