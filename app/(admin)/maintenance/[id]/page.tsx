@@ -17,8 +17,9 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
       unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, settlement_date, owners:unit_owners(id, name, email, phone), project:projects(id, name)),
       trade:trades(id, name),
       contractor:contractors(id, company_name, contact_name, email, phone),
-      work_order:work_orders(id, work_order_number)
-    `).eq('id', id).single(),
+      work_order:work_orders(id, work_order_number),
+      extra_trades:maintenance_item_trades(id, maintenance_item_id, trade_id, contractor_id, status, scheduled_date, completed_at, sort_order, created_at, trade:trades(id, name), contractor:contractors(id, company_name))
+    `).eq('id', id).order('sort_order', { referencedTable: 'maintenance_item_trades' }).single(),
     supabase.from('activity_log').select('*').eq('maintenance_item_id', id).order('created_at', { ascending: false }),
     supabase.from('contractor_comments').select('*').eq('maintenance_item_id', id).order('created_at'),
     supabase.from('maintenance_item_attachments').select('*').eq('maintenance_item_id', id).order('created_at'),
@@ -33,9 +34,12 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   const attachments = await withSignedUrls(supabase, attachmentsRes.data ?? [])
 
   const projectId = (itemRes.data as any).unit?.project?.id
-  const tradesRes = projectId
-    ? await supabase.from('trades').select('*').eq('project_id', projectId).order('name')
-    : { data: [] }
+  const [tradesRes, assignmentsRes] = projectId
+    ? await Promise.all([
+        supabase.from('trades').select('*').eq('project_id', projectId).order('name'),
+        supabase.from('project_trade_assignments').select('trade_id, contractor_id').eq('project_id', projectId),
+      ])
+    : [{ data: [] }, { data: [] }]
 
   return (
     <div>
@@ -56,6 +60,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         attachments={attachments}
         contractors={contractorsRes.data ?? []}
         trades={tradesRes.data ?? []}
+        tradeAssignments={assignmentsRes.data ?? []}
         users={usersRes.data ?? []}
         currentUserId={user?.id ?? ''}
       />

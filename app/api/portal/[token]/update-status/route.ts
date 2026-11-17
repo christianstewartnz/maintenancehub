@@ -9,7 +9,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params
-  const { item_id, status } = await req.json()
+  const { item_id, item_trade_id, status } = await req.json()
 
   // Use anon client (portal_update_status is SECURITY DEFINER, safe for anon)
   const supabase = createClient(
@@ -21,14 +21,16 @@ export async function POST(
     p_token: token,
     p_item_id: item_id,
     p_status: status,
+    p_item_trade_id: item_trade_id ?? null,
   })
 
   if (error) return Response.json({ error: error.message }, { status: 400 })
+  if ((data as any)?.error) return Response.json({ error: (data as any).error }, { status: 400 })
 
   // Send notification email when contractor marks as complete
   if (status === 'contractor_complete' && isEmailConfigured()) {
     try {
-      await sendContractorCompleteNotification(token, item_id)
+      await sendContractorCompleteNotification(token, item_id, item_trade_id ?? null)
     } catch {
       // Non-fatal: status was already updated
     }
@@ -37,7 +39,7 @@ export async function POST(
   return Response.json({ data })
 }
 
-async function sendContractorCompleteNotification(token: string, itemId: string) {
+async function sendContractorCompleteNotification(token: string, itemId: string, itemTradeId: string | null) {
   const serviceSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -56,12 +58,23 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
   if (!recipients.length) return
 
   const unit = item.unit as any
-  const contractor = item.contractor as any
+  let contractor = item.contractor as any
+  let tradeName: string | null = null
+  if (itemTradeId) {
+    // An additional trade was finished: name that trade's contractor, not the item's main one
+    const { data: line } = await serviceSupabase
+      .from('maintenance_item_trades')
+      .select('trade:trades(name), contractor:contractors(company_name)')
+      .eq('id', itemTradeId)
+      .single()
+    contractor = (line as any)?.contractor ?? contractor
+    tradeName = (line as any)?.trade?.name ?? null
+  }
   const project = unit?.project as any
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
   const { subject, html } = contractorCompleteEmail({
-    itemTitle: item.title,
+    itemTitle: tradeName ? `${item.title} (${tradeName})` : item.title,
     itemNumber: item.item_number,
     unitLabel: formatUnitLabel(unit),
     projectName: project?.name ?? '—',

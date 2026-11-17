@@ -5,9 +5,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile } from '@/lib/types'
+import type { MaintenanceItem, MaintenanceItemTrade, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile } from '@/lib/types'
 import { profileName } from '@/lib/assignees'
-import { Pencil, Mail, CheckCircle2, RotateCcw, Archive, ArchiveRestore } from 'lucide-react'
+import { Pencil, Mail, CheckCircle2, RotateCcw, Archive, ArchiveRestore, X } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, type PhotoWithUrl } from '@/lib/photos'
 import type { PhotoType } from '@/lib/types'
@@ -20,12 +20,19 @@ interface Props {
   attachments: (MaintenanceItemAttachment & { url: string | null })[]
   contractors: { id: string; company_name: string }[]
   trades: Trade[]
+  /** The project's default contractor per trade, used to pre-fill additional trades. */
+  tradeAssignments: { trade_id: string; contractor_id: string }[]
   users: Profile[]
   currentUserId: string
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, users, currentUserId }: Props) {
+const EXTRA_TRADE_SELECT = 'id, maintenance_item_id, trade_id, contractor_id, status, scheduled_date, completed_at, sort_order, created_at, trade:trades(id, name), contractor:contractors(id, company_name)'
+
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, tradeAssignments, users, currentUserId }: Props) {
   const [item, setItem] = useState(initial)
+  const [extraTrades, setExtraTrades] = useState<MaintenanceItemTrade[]>(initial.extra_trades ?? [])
+  const [addingTradeId, setAddingTradeId] = useState('')
+  const [savingExtra, setSavingExtra] = useState<string | null>(null)
   const [activity, setActivity] = useState(initialActivity)
   const [comments, setComments] = useState(initialComments)
   const [comment, setComment] = useState('')
@@ -46,7 +53,14 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
 
   async function setStatus(to: MaintenanceStatus) {
     if (to === item.status) return
+    // Signing the item off signs off its additional trades too
+    const unfinished = to === 'complete' ? extraTrades.filter(t => t.status !== 'complete') : []
+    if (unfinished.length && !confirm(`This will also mark ${unfinished.map(t => t.trade?.name ?? 'trade').join(', ')} as complete. Continue?`)) return
     setUpdatingStatus(true)
+    if (unfinished.length) {
+      await supabase.from('maintenance_item_trades').update({ status: 'complete' }).in('id', unfinished.map(t => t.id))
+      setExtraTrades(prev => prev.map(t => ({ ...t, status: 'complete' })))
+    }
     const completed_at = to === 'complete' ? new Date().toISOString() : null
     const { data } = await supabase.from('maintenance_items').update({ status: to, completed_at }).eq('id', item.id).select().single()
     if (data) {
@@ -80,6 +94,78 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       .single()
     if (data) setItem(prev => ({ ...prev, ...data }))
     setAssigningContractor(false)
+  }
+
+  // ---- Additional trades ----
+
+  function logLocal(action: string, details: Record<string, unknown>) {
+    setActivity(prev => [{
+      id: Math.random().toString(),
+      maintenance_item_id: item.id,
+      action,
+      details,
+      performed_by: 'admin',
+      created_at: new Date().toISOString(),
+    }, ...prev])
+  }
+
+  async function addExtraTrade(tradeId: string) {
+    if (!tradeId) return
+    setSavingExtra('new')
+    // Pre-fill the project's usual contractor for this trade
+    const contractorId = tradeAssignments.find(a => a.trade_id === tradeId)?.contractor_id ?? null
+    const sortOrder = extraTrades.reduce((m, t) => Math.max(m, t.sort_order), 0) + 1
+    const { data, error } = await supabase
+      .from('maintenance_item_trades')
+      .insert({ maintenance_item_id: item.id, trade_id: tradeId, contractor_id: contractorId, status: contractorId ? 'assigned' : 'logged', sort_order: sortOrder })
+      .select(EXTRA_TRADE_SELECT)
+      .single()
+    if (error || !data) {
+      alert(`Couldn't add trade: ${error?.message ?? 'unknown error'}`)
+    } else {
+      const row = data as unknown as MaintenanceItemTrade
+      setExtraTrades(prev => [...prev, row])
+      logLocal('trade_added', { trade: row.trade?.name, contractor: row.contractor?.company_name })
+    }
+    setAddingTradeId('')
+    setSavingExtra(null)
+  }
+
+  async function updateExtraTrade(row: MaintenanceItemTrade, patch: Partial<Pick<MaintenanceItemTrade, 'contractor_id' | 'status'>>) {
+    // Same rule as the main contractor: giving a logged trade a contractor moves it to Assigned, clearing it moves it back
+    if ('contractor_id' in patch && !('status' in patch)) {
+      if (patch.contractor_id && row.status === 'logged') patch.status = 'assigned'
+      else if (!patch.contractor_id && row.status === 'assigned') patch.status = 'logged'
+    }
+    setSavingExtra(row.id)
+    const { data, error } = await supabase
+      .from('maintenance_item_trades')
+      .update(patch)
+      .eq('id', row.id)
+      .select(EXTRA_TRADE_SELECT)
+      .single()
+    if (error || !data) {
+      alert(`Couldn't update trade: ${error?.message ?? 'unknown error'}`)
+    } else {
+      const updated = data as unknown as MaintenanceItemTrade
+      setExtraTrades(prev => prev.map(t => t.id === row.id ? updated : t))
+      if (patch.status && patch.status !== row.status) logLocal('trade_status_changed', { trade: updated.trade?.name, from: row.status, to: patch.status })
+      if ('contractor_id' in patch && patch.contractor_id && patch.contractor_id !== row.contractor_id) logLocal('trade_contractor_assigned', { trade: updated.trade?.name, contractor: updated.contractor?.company_name })
+    }
+    setSavingExtra(null)
+  }
+
+  async function removeExtraTrade(row: MaintenanceItemTrade) {
+    if (!confirm(`Remove ${row.trade?.name ?? 'this trade'} from ${item.item_number}?${row.contractor ? ` It will disappear from ${row.contractor.company_name}'s portal.` : ''}`)) return
+    setSavingExtra(row.id)
+    const { error } = await supabase.from('maintenance_item_trades').delete().eq('id', row.id)
+    if (error) {
+      alert(`Couldn't remove trade: ${error.message}`)
+    } else {
+      setExtraTrades(prev => prev.filter(t => t.id !== row.id))
+      logLocal('trade_removed', { trade: row.trade?.name })
+    }
+    setSavingExtra(null)
   }
 
   async function submitComment() {
@@ -183,18 +269,29 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   async function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
+    const update: Record<string, unknown> = {
+      title: editForm.title,
+      description: editForm.description || null,
+      trade_id: editForm.trade_id || null,
+    }
+    // Trade changed: switch to the project's contractor for the new trade (if it has one)
+    const tradeChanged = (editForm.trade_id || null) !== item.trade_id
+    const defaultContractorId = tradeChanged && editForm.trade_id
+      ? tradeAssignments.find(a => a.trade_id === editForm.trade_id)?.contractor_id ?? null
+      : null
+    if (defaultContractorId) {
+      update.contractor_id = defaultContractorId
+      if (item.status === 'logged') update.status = 'assigned'
+    }
     const { data, error } = await supabase
       .from('maintenance_items')
-      .update({
-        title: editForm.title,
-        description: editForm.description || null,
-        trade_id: editForm.trade_id || null,
-      })
+      .update(update)
       .eq('id', item.id)
       .select('*, trade:trades(id, name), contractor:contractors(id, company_name, contact_name, email, phone)')
       .single()
     if (!error && data) {
       setItem(prev => ({ ...prev, ...data }))
+      setSelectedContractor(data.contractor_id ?? '')
       setShowEditModal(false)
       router.refresh()
     }
@@ -417,8 +514,81 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
           </>}
         </InfoCard>
 
-        <InfoCard title="Trade">
-          <Row label="Category" value={trade?.name} />
+        <InfoCard title={extraTrades.length ? 'Trades' : 'Trade'}>
+          <div style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: extraTrades.length ? 10 : 4, alignItems: 'baseline' }}>
+            {extraTrades.length > 0 && <span style={tradeNumStyle}>1</span>}
+            <span style={{ color: trade?.name ? '#37352f' : '#b0aea8', fontWeight: 500 }}>{trade?.name ?? 'No trade'}</span>
+            <span style={{ color: '#787774', fontSize: 12, marginLeft: 'auto' }}>{contractor?.company_name ?? 'see Contractor'}</span>
+          </div>
+
+          {extraTrades.map((t, i) => (
+            <div key={t.id} style={{ borderTop: '1px solid #f1f1ef', padding: '10px 0 6px' }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13, alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={tradeNumStyle}>{i + 2}</span>
+                <span style={{ color: '#37352f', fontWeight: 500 }}>{t.trade?.name ?? 'Trade'}</span>
+                <button
+                  className="btn btn-ghost"
+                  title="Remove trade"
+                  style={{ marginLeft: 'auto', padding: '0 4px', fontSize: 12, color: '#787774' }}
+                  onClick={() => removeExtraTrade(t)}
+                  disabled={savingExtra === t.id}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <select
+                  className="input"
+                  aria-label={`${t.trade?.name} contractor`}
+                  value={t.contractor_id ?? ''}
+                  onChange={e => updateExtraTrade(t, { contractor_id: e.target.value || null })}
+                  disabled={savingExtra === t.id}
+                  style={{ fontSize: 13 }}
+                >
+                  <option value="">No contractor</option>
+                  {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                </select>
+                <select
+                  className="input"
+                  aria-label={`${t.trade?.name} status`}
+                  value={t.status}
+                  onChange={e => updateExtraTrade(t, { status: e.target.value as MaintenanceStatus })}
+                  disabled={savingExtra === t.id}
+                  style={{ fontSize: 13 }}
+                >
+                  {(['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete'] as MaintenanceStatus[]).map(s => (
+                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+
+          {(() => {
+            const used = new Set([item.trade_id, ...extraTrades.map(t => t.trade_id)])
+            const available = trades.filter(t => !used.has(t.id))
+            if (!available.length) return null
+            return (
+              <div style={{ borderTop: '1px solid #f1f1ef', paddingTop: 10, marginTop: 4 }}>
+                <select
+                  className="input"
+                  aria-label="Add another trade"
+                  value={addingTradeId}
+                  onChange={e => { setAddingTradeId(e.target.value); addExtraTrade(e.target.value) }}
+                  disabled={savingExtra === 'new'}
+                  style={{ fontSize: 13, color: '#787774' }}
+                >
+                  <option value="">{savingExtra === 'new' ? 'Adding…' : '+ Add another trade…'}</option>
+                  {available.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                {extraTrades.length === 0 && (
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#787774' }}>
+                    For jobs that need more than one trade, e.g. a builder to refix then a painter to make good. Each trade gets its own contractor and shows in their portal.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
         </InfoCard>
 
         <InfoCard title="Contractor">
@@ -565,11 +735,17 @@ function formatActivityLog(log: ActivityLog): string {
       : 'added a photo'
     case 'item_archived': return 'archived item'
     case 'item_restored': return 'restored item from archive'
+    case 'trade_added': return `added trade ${d?.trade ?? ''}${d?.contractor ? ` (${d.contractor})` : ''}`
+    case 'trade_removed': return `removed trade ${d?.trade ?? ''}`
+    case 'trade_contractor_assigned': return `assigned ${d?.contractor ?? 'a contractor'} to ${d?.trade ?? 'a trade'}`
+    case 'trade_status_changed': return `changed ${d?.trade ?? 'trade'} from ${STATUS_LABELS[d?.from as MaintenanceStatus] ?? d?.from} to ${STATUS_LABELS[d?.to as MaintenanceStatus] ?? d?.to}`
     case 'email_update': return `added an email update${d?.email_subject ? ` (“${d.email_subject}”)` : ''}`
     default: return log.action.replace(/_/g, ' ')
   }
 }
 
 const archivedPillStyle: React.CSSProperties = { fontSize: 12, fontWeight: 500, color: '#787774', background: '#f1f1ef', border: '1px solid #e9e9e7', borderRadius: 4, padding: '2px 8px' }
+
+const tradeNumStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#787774', background: '#f1f1ef', borderRadius: 10, minWidth: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }
 
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5, color: '#37352f' }

@@ -15,7 +15,8 @@ export default async function MaintenancePage() {
         unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
         trade:trades(id, name),
         contractor:contractors(id, company_name),
-        work_order:work_orders(id, work_order_number)
+        work_order:work_orders(id, work_order_number),
+        extra_trades:maintenance_item_trades(id, trade_id, contractor_id, status, sort_order, trade:trades(id, name), contractor:contractors(id, company_name))
       `)
       .order('created_at', { ascending: false })
       .limit(500),
@@ -25,6 +26,7 @@ export default async function MaintenancePage() {
     supabase.from('trades').select('id, name, project_id').order('name'),
     supabase.auth.getUser(),
   ])
+  const { data: tradeAssignments } = await supabase.from('project_trade_assignments').select('project_id, trade_id, contractor_id')
 
   return (
     <div>
@@ -38,6 +40,7 @@ export default async function MaintenancePage() {
         contractors={contractorsRes.data ?? []}
         users={usersRes.data ?? []}
         trades={tradesRes.data ?? []}
+        tradeAssignments={tradeAssignments ?? []}
         currentUserId={user?.id ?? ''}
       />
     </div>

@@ -107,6 +107,23 @@ export interface MaintenanceItem {
   trade?: Trade
   contractor?: Contractor
   work_order?: WorkOrder
+  /** Additional trades after the main one (e.g. Painting after General Building refixes). */
+  extra_trades?: MaintenanceItemTrade[]
+}
+
+/** An additional trade on a maintenance item, with its own contractor and status. */
+export interface MaintenanceItemTrade {
+  id: string
+  maintenance_item_id: string
+  trade_id: string
+  contractor_id: string | null
+  status: MaintenanceStatus
+  scheduled_date: string | null
+  completed_at: string | null
+  sort_order: number
+  created_at: string
+  trade?: { id: string; name: string }
+  contractor?: { id: string; company_name: string } | null
 }
 
 /** A Maintenance Hub staff user (mirrors auth.users). */

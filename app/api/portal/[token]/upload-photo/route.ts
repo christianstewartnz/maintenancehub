@@ -34,9 +34,11 @@ export async function POST(
     .from('contractors').select('id, company_name').eq('portal_token', token).maybeSingle()
   if (!contractor) return Response.json({ error: 'Invalid token' }, { status: 401 })
 
-  const { data: item } = await supabase
-    .from('maintenance_items').select('id, status')
-    .eq('id', itemId).eq('contractor_id', contractor.id).maybeSingle()
+  // Main contractor or an additional-trade contractor on this item
+  const { data: onItem } = await supabase.rpc('contractor_on_item', { p_item_id: itemId, p_contractor_id: contractor.id })
+  const { data: item } = onItem
+    ? await supabase.from('maintenance_items').select('id, status').eq('id', itemId).maybeSingle()
+    : { data: null }
   if (!item) return Response.json({ error: 'Item not found' }, { status: 404 })
   if (item.status === 'complete') return Response.json({ error: 'This item is already signed off' }, { status: 400 })
 

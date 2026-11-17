@@ -38,6 +38,11 @@ function isNewItem(item: { status: string; contractor_notified_at?: string | nul
   return Date.now() - new Date(item.contractor_notified_at).getTime() < PORTAL_NEW_DAYS * 86400000
 }
 
+/** A portal row is one job: the item itself, or one additional trade on it (item_trade_id set). */
+function keyOf(item: { id: string; item_trade_id?: string | null }): string {
+  return item.item_trade_id ?? item.id
+}
+
 // ---------- Item accordion ----------
 interface ItemProps {
   item: any
@@ -79,6 +84,11 @@ function ItemRow({
               </span>
             )}
             <StatusBadge status={item.status} />
+            {item.trade && (item.all_trades?.length ?? 0) > 1 && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#6940a5', background: '#f4effa', borderRadius: 4, padding: '1px 6px' }}>
+                {item.trade.name}
+              </span>
+            )}
             {item.work_order && (
               <span style={{
                 fontSize: 11, fontWeight: 600, color: '#2f6fcf',
@@ -110,6 +120,32 @@ function ItemRow({
         <div style={{ borderTop: '1px solid #f0f0ee', padding: '14px 14px' }}>
           {item.description && (
             <p style={{ margin: '0 0 14px', fontSize: 14, color: '#37352f', whiteSpace: 'pre-wrap' }}>{item.description}</p>
+          )}
+
+          {item.waiting_on?.length > 0 && (
+            <div style={{ margin: '0 0 14px', padding: '8px 12px', background: '#fff8e6', border: '1px solid #f3e2b8', borderRadius: 6, fontSize: 13, color: '#8a5a00', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Clock size={13} /> Waiting on {item.waiting_on.join(', ')} to finish first.
+            </div>
+          )}
+
+          {(item.all_trades?.length ?? 0) > 1 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#787774', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Trades on this job
+              </div>
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#37352f' }}>
+                {item.all_trades.map((t: any, i: number) => {
+                  const done = t.status === 'contractor_complete' || t.status === 'complete'
+                  const mine = t.trade === item.trade?.name
+                  return (
+                    <li key={i} style={{ marginBottom: 2, fontWeight: mine ? 600 : undefined }}>
+                      {t.trade}{t.contractor ? ` — ${t.contractor}` : ''}{mine ? ' (you)' : ''}
+                      {done && <span style={{ color: '#2e7d32', marginLeft: 6 }}>✓ done</span>}
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
           )}
 
           <div style={{ marginBottom: 14 }}>
@@ -293,32 +329,35 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     }
   }
 
-  async function updateStatus(itemId: string, status: MaintenanceStatus) {
+  async function updateStatus(jobKey: string, status: MaintenanceStatus) {
+    const item = items.find(i => keyOf(i) === jobKey)
+    if (!item) return
     if (status === 'contractor_complete') {
-      const item = items.find(i => i.id === itemId)
       const hasAfter = (item?.attachments ?? []).some((a: any) => a.photo_type === 'after')
       const ref = item ? `${item.item_number} (${formatUnitLabel(item.unit, 'unknown unit')})` : 'this item'
       if (!hasAfter && !confirm(`You haven’t added a completion photo for ${ref} yet. Mark complete without one?`)) return
     }
-    setSubmitting(prev => ({ ...prev, [itemId]: true }))
+    setSubmitting(prev => ({ ...prev, [jobKey]: true }))
     await fetch(`/api/portal/${token}/update-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId, status }),
+      body: JSON.stringify({ item_id: item.id, item_trade_id: item.item_trade_id ?? null, status }),
     })
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
-    setSubmitting(prev => ({ ...prev, [itemId]: false }))
+    setItems(prev => prev.map(i => keyOf(i) === jobKey ? { ...i, status } : i))
+    setSubmitting(prev => ({ ...prev, [jobKey]: false }))
   }
 
-  async function setScheduledDate(itemId: string, date: string) {
-    setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: true }))
+  async function setScheduledDate(jobKey: string, date: string) {
+    const item = items.find(i => keyOf(i) === jobKey)
+    if (!item) return
+    setSubmitting(prev => ({ ...prev, [`date-${jobKey}`]: true }))
     await fetch(`/api/portal/${token}/set-scheduled-date`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_id: itemId, scheduled_date: date || null }),
+      body: JSON.stringify({ item_id: item.id, item_trade_id: item.item_trade_id ?? null, scheduled_date: date || null }),
     })
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, scheduled_date: date || null } : i))
-    setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: false }))
+    setItems(prev => prev.map(i => keyOf(i) === jobKey ? { ...i, scheduled_date: date || null } : i))
+    setSubmitting(prev => ({ ...prev, [`date-${jobKey}`]: false }))
   }
 
   async function submitComment(itemId: string) {
@@ -503,18 +542,18 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                               <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.015)' }}>
                                 {unitItems.map((item: any) => (
                                   <ItemRow
-                                    key={item.id}
+                                    key={keyOf(item)}
                                     item={item}
-                                    isExpanded={expandedItems.has(item.id)}
-                                    onToggle={() => toggleItem(item.id)}
+                                    isExpanded={expandedItems.has(keyOf(item))}
+                                    onToggle={() => toggleItem(keyOf(item))}
                                     comment={comments[item.id] ?? ''}
                                     onComment={val => setComments(prev => ({ ...prev, [item.id]: val }))}
                                     onSubmitComment={() => submitComment(item.id)}
-                                    onUpdateStatus={status => updateStatus(item.id, status)}
-                                    onSetScheduledDate={date => setScheduledDate(item.id, date)}
-                                    isStatusSubmitting={!!submitting[item.id]}
+                                    onUpdateStatus={status => updateStatus(keyOf(item), status)}
+                                    onSetScheduledDate={date => setScheduledDate(keyOf(item), date)}
+                                    isStatusSubmitting={!!submitting[keyOf(item)]}
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
-                                    isDateSubmitting={!!submitting[`date-${item.id}`]}
+                                    isDateSubmitting={!!submitting[`date-${keyOf(item)}`]}
                                     onUploadPhoto={(blob, name) => uploadPhoto(item.id, blob, name)}
                                     onPhotosChange={photos => setItems(prev => prev.map(i => i.id === item.id ? { ...i, attachments: photos } : i))}
                                   />
