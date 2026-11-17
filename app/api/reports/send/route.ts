@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       .from('maintenance_items')
       .select('id, item_number, title, status, created_at, completed_at, unit:units(unit_identifier, address, project:projects(id, name))')
       .is('archived_at', null)
+      .eq('has_steps', false) // a job split into steps is counted through its steps
 
     if (prefs.report_scope === 'per_project' && prefs.report_projects?.length > 0) {
       // Filter to specific projects via units

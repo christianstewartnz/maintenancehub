@@ -19,6 +19,7 @@ export default async function DashboardPage() {
       .from('maintenance_items')
       .select(itemSelect)
       .not('status', 'in', '(complete)')
+      .eq('has_steps', false) // a job split into steps is counted through its steps
       .is('archived_at', null)
       .order('created_at', { ascending: false }),
     // Fetch all items with a scheduled_date (including complete) so calendar shows full picture
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
       .from('maintenance_items')
       .select(itemSelect)
       .not('scheduled_date', 'is', null)
+      .eq('has_steps', false)
       .is('archived_at', null)
       .order('scheduled_date', { ascending: true }),
   ])

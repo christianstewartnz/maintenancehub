@@ -47,6 +47,7 @@ export default function Sidebar() {
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'contractor_complete')
+          .eq('has_steps', false) // a job split into steps is signed off through its steps
           .is('archived_at', null),
         supabase
           .from('maintenance_items')

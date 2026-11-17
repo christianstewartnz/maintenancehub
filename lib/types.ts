@@ -103,28 +103,44 @@ export interface MaintenanceItem {
   contractor_notified_at: string | null
   /** When the item was archived; null = active. Archived items are hidden from lists, counts and the portal. */
   archived_at: string | null
+  /** Set on a step: the job (parent item) it belongs to. Step numbers look like MI-0166-2. */
+  parent_item_id?: string | null
+  /** A step's position within its job (reorderable; the item number stays fixed). */
+  step_order?: number | null
+  /** True on a job that's split into steps: it has no contractor and its status follows its steps. */
+  has_steps?: boolean
   unit?: Unit & { project?: Project }
   trade?: Trade
   contractor?: Contractor
   work_order?: WorkOrder
-  /** Additional trades after the main one (e.g. Painting after General Building refixes). */
-  extra_trades?: MaintenanceItemTrade[]
 }
 
-/** An additional trade on a maintenance item, with its own contractor and status. */
-export interface MaintenanceItemTrade {
+/** A step as shown in a job's Steps panel / the list. */
+export interface ItemStep {
   id: string
-  maintenance_item_id: string
-  trade_id: string
-  contractor_id: string | null
+  item_number: string
+  title: string
+  description: string | null
   status: MaintenanceStatus
-  scheduled_date: string | null
-  completed_at: string | null
-  sort_order: number
-  created_at: string
-  trade?: { id: string; name: string }
+  step_order: number | null
+  trade_id: string | null
+  contractor_id: string | null
+  archived_at: string | null
+  trade?: { id: string; name: string } | null
   contractor?: { id: string; company_name: string } | null
 }
+
+/** Columns the maintenance list needs (page load and re-fetching a job after adding a step). */
+export const LIST_SELECT = `
+  id, item_number, title, description, status, created_at, updated_at, assigned_to, contractor_id, trade_id, archived_at,
+  parent_item_id, step_order, has_steps,
+  unit:units(id, unit_identifier, address, project_id, project:projects(id, name)),
+  trade:trades(id, name),
+  contractor:contractors(id, company_name),
+  work_order:work_orders(id, work_order_number)
+`
+
+export const STEP_SELECT = 'id, item_number, title, description, status, step_order, trade_id, contractor_id, archived_at, trade:trades(id, name), contractor:contractors(id, company_name)'
 
 /** A Maintenance Hub staff user (mirrors auth.users). */
 export interface Profile {

@@ -16,6 +16,7 @@ export default async function SignOffPage() {
         contractor:contractors(id, company_name, contact_name, email)
       `)
       .eq('status', 'contractor_complete')
+      .eq('has_steps', false) // a job split into steps is signed off through its steps
       .is('archived_at', null)
       .order('updated_at', { ascending: true }),
     supabase.from('projects').select('id, name').eq('status', 'active').order('name'),

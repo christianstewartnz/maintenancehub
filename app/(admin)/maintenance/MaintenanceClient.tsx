@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Archive, ArchiveRestore, CheckCheck, Download, Plus, Search, X } from 'lucide-react'
+import { Archive, ArchiveRestore, CheckCheck, ChevronDown, ChevronRight, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
-import type { MaintenanceItem, MaintenanceItemTrade, MaintenanceStatus, Profile } from '@/lib/types'
+import { LIST_SELECT, type MaintenanceItem, type MaintenanceStatus, type Profile } from '@/lib/types'
 import { useSessionState } from '@/lib/useSessionState'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
 
@@ -20,12 +20,10 @@ interface Props {
   contractors: { id: string; company_name: string }[]
   users: Profile[]
   trades: { id: string; name: string; project_id: string }[]
-  /** Each project's usual contractor per trade, used to pre-fill a quick-added trade. */
+  /** Each project's usual contractor per trade, used when a trade is picked. */
   tradeAssignments: { project_id: string; trade_id: string; contractor_id: string }[]
   currentUserId: string
 }
-
-const EXTRA_TRADE_SELECT = 'id, maintenance_item_id, trade_id, contractor_id, status, scheduled_date, completed_at, sort_order, created_at, trade:trades(id, name), contractor:contractors(id, company_name)'
 
 export default function MaintenanceClient({ items: initial, projects, contractors, users, trades, tradeAssignments, currentUserId }: Props) {
   const [items, setItems] = useState(initial)
@@ -123,6 +121,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         trade: t ? { id: t.id, name: t.name } : null,
         ...(defaultContractorId ? { contractor_id: defaultContractorId, contractor: c ? { id: c.id, company_name: c.company_name } : i.contractor, status } : {}),
       } as MaintenanceItem : i))
+      // A step's status feeds its job's status
+      if (item.parent_item_id && defaultContractorId) await reloadJob(item.parent_item_id)
     }
     markSaving(item.id, false)
   }
@@ -142,65 +142,9 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       const c = contractorId ? contractors.find(x => x.id === contractorId) : null
       // The DB trigger logs contractor/status changes to the activity feed
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, contractor_id: contractorId, status, contractor: c ? { id: c.id, company_name: c.company_name } : null } as MaintenanceItem : i))
+      if (item.parent_item_id && status !== item.status) await reloadJob(item.parent_item_id)
     }
     markSaving(item.id, false)
-  }
-
-  // ---- Additional trades (quick add from the list) ----
-
-  function setRowExtras(itemId: string, fn: (rows: MaintenanceItemTrade[]) => MaintenanceItemTrade[]) {
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, extra_trades: fn(i.extra_trades ?? []) } : i))
-  }
-
-  async function addExtraTrade(item: MaintenanceItem, tradeId: string) {
-    if (!tradeId) return
-    const projectId = (item.unit as any)?.project?.id ?? (item.unit as any)?.project_id
-    const contractorId = tradeAssignments.find(a => a.project_id === projectId && a.trade_id === tradeId)?.contractor_id ?? null
-    const sortOrder = (item.extra_trades ?? []).reduce((m, t) => Math.max(m, t.sort_order), 0) + 1
-    markSaving(item.id, true)
-    const { data, error } = await supabase
-      .from('maintenance_item_trades')
-      .insert({ maintenance_item_id: item.id, trade_id: tradeId, contractor_id: contractorId, status: contractorId ? 'assigned' : 'logged', sort_order: sortOrder })
-      .select(EXTRA_TRADE_SELECT)
-      .single()
-    if (error || !data) alert(`Couldn't add trade: ${error?.message ?? 'unknown error'}`)
-    else setRowExtras(item.id, rows => [...rows, data as unknown as MaintenanceItemTrade])
-    markSaving(item.id, false)
-  }
-
-  async function changeExtraContractor(item: MaintenanceItem, row: MaintenanceItemTrade, contractorId: string | null) {
-    const status: MaintenanceStatus =
-      contractorId && row.status === 'logged' ? 'assigned'
-      : !contractorId && row.status === 'assigned' ? 'logged'
-      : row.status
-    markSaving(item.id, true)
-    const { data, error } = await supabase
-      .from('maintenance_item_trades')
-      .update({ contractor_id: contractorId, status })
-      .eq('id', row.id)
-      .select(EXTRA_TRADE_SELECT)
-      .single()
-    if (error || !data) alert(`Couldn't update contractor: ${error?.message ?? 'unknown error'}`)
-    else setRowExtras(item.id, rows => rows.map(r => r.id === row.id ? data as unknown as MaintenanceItemTrade : r))
-    markSaving(item.id, false)
-  }
-
-  async function removeExtraTrade(item: MaintenanceItem, row: MaintenanceItemTrade) {
-    if (!confirm(`Remove ${row.trade?.name ?? 'this trade'} from ${item.item_number}?`)) return
-    markSaving(item.id, true)
-    const { error } = await supabase.from('maintenance_item_trades').delete().eq('id', row.id)
-    if (error) alert(`Couldn't remove trade: ${error.message}`)
-    else setRowExtras(item.id, rows => rows.filter(r => r.id !== row.id))
-    markSaving(item.id, false)
-  }
-
-  /** Project trades that can still be added to this item (needs a main trade first). */
-  function addableTrades(item: MaintenanceItem) {
-    const mainTradeId = item.trade_id ?? (item.trade as any)?.id
-    if (!mainTradeId) return []
-    const unit = item.unit as any
-    const used = new Set([mainTradeId, ...(item.extra_trades ?? []).map(t => t.trade_id)])
-    return (tradesByProject.get(unit?.project?.id ?? unit?.project_id) ?? []).filter(t => !used.has(t.id))
   }
 
   function toggleSelected(id: string) {
@@ -223,6 +167,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       const done = new Set(ids)
       setItems(prev => prev.map(i => done.has(i.id) ? { ...i, status: 'complete', completed_at } : i))
       setSelected(new Set())
+      await reloadJobsOf(ids)
       router.refresh()
     }
     setCompleting(false)
@@ -244,6 +189,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       const set = new Set(ids)
       setItems(prev => prev.map(i => set.has(i.id) ? { ...i, archived_at } : i))
       setSelected(new Set())
+      await reloadJobsOf(ids)
       router.refresh()
     }
     setArchiving(false)
@@ -281,10 +227,9 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         ? result.filter(i => i.status === filterStatus)
         : result.filter(i => i.status !== 'complete')
     }
-    if (filterContractor === 'none') result = result.filter(i => !(i.contractor_id ?? (i.contractor as any)?.id))
-    // A contractor's items include ones where they do an additional trade
-    else if (filterContractor) result = result.filter(i => (i.contractor_id ?? (i.contractor as any)?.id) === filterContractor
-      || i.extra_trades?.some(t => t.contractor_id === filterContractor))
+    // A job split into steps has no contractor by design; its steps carry them
+    if (filterContractor === 'none') result = result.filter(i => !i.has_steps && !(i.contractor_id ?? (i.contractor as any)?.id))
+    else if (filterContractor) result = result.filter(i => (i.contractor_id ?? (i.contractor as any)?.id) === filterContractor)
     if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
 
     const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
@@ -305,6 +250,219 @@ export default function MaintenanceClient({ items: initial, projects, contractor
 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
+  }
+
+  // ---- Steps ----
+  // A job split into steps shows its steps nested beneath it. A step whose job isn't
+  // in the filtered list (e.g. filtering by the step's contractor) shows on its own row.
+  const stepsByParent = useMemo(() => {
+    const map = new Map<string, MaintenanceItem[]>()
+    for (const i of items) {
+      if (!i.parent_item_id) continue
+      const list = map.get(i.parent_item_id) ?? []
+      list.push(i)
+      map.set(i.parent_item_id, list)
+    }
+    for (const list of map.values()) list.sort((a, b) => (a.step_order ?? 0) - (b.step_order ?? 0))
+    return map
+  }, [items])
+  const itemNumberById = useMemo(() => new Map(items.map(i => [i.id, i.item_number])), [items])
+  const displayRows = useMemo(() => {
+    const ids = new Set(filtered.map(i => i.id))
+    return filtered.filter(i => !i.parent_item_id || !ids.has(i.parent_item_id))
+  }, [filtered])
+  const [collapsedJobs, setCollapsedJobs] = useState<Set<string>>(new Set())
+  function toggleJob(id: string) {
+    setCollapsedJobs(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+
+  /** Re-fetch a job and its steps after a change made through the database (adding a step). */
+  async function reloadJob(jobId: string) {
+    const { data } = await supabase.from('maintenance_items').select(LIST_SELECT).or(`id.eq.${jobId},parent_item_id.eq.${jobId}`)
+    if (!data) return
+    const fresh = new Map((data as unknown as MaintenanceItem[]).map(i => [i.id, i]))
+    setItems(prev => [...prev.map(i => fresh.get(i.id) ?? i), ...[...fresh.values()].filter(f => !prev.some(i => i.id === f.id))])
+  }
+
+  /** After a bulk change: refresh every job touched (a job's steps, or a step's job). */
+  async function reloadJobsOf(ids: string[]) {
+    const jobIds = new Set<string>()
+    for (const id of ids) {
+      const i = items.find(x => x.id === id)
+      if (i?.has_steps) jobIds.add(i.id)
+      if (i?.parent_item_id) jobIds.add(i.parent_item_id)
+    }
+    await Promise.all([...jobIds].map(reloadJob))
+  }
+
+  async function quickAddStep(item: MaintenanceItem, tradeId: string) {
+    if (!tradeId) return
+    markSaving(item.id, true)
+    // The project's contractor for the trade is filled in by the database
+    const { error } = await supabase.rpc('add_item_step', { p_parent_id: item.id, p_trade_id: tradeId })
+    if (error) alert(`Couldn't add step: ${error.message}`)
+    else {
+      setCollapsedJobs(prev => { const s = new Set(prev); s.delete(item.id); return s })
+      await reloadJob(item.id)
+    }
+    markSaving(item.id, false)
+  }
+
+  function renderRow(item: MaintenanceItem, { stepNo }: { stepNo?: number }) {
+    const days = getDaysSince(item.created_at)
+    const isComplete = item.status === 'complete'
+    const ageClass = getItemRowClass(item)
+    const unit = item.unit as any
+    const isJob = !!item.has_steps
+    const nested = stepNo !== undefined
+    const projectTrades = tradesByProject.get(unit?.project?.id ?? unit?.project_id) ?? []
+    const jobSteps = isJob ? (stepsByParent.get(item.id) ?? []).filter(s => !s.archived_at) : []
+    const stepsDone = jobSteps.filter(s => s.status === 'contractor_complete' || s.status === 'complete').length
+    const stepsUnassigned = jobSteps.filter(s => !s.contractor_id).length
+    const canAddStep = !item.parent_item_id && !item.archived_at && projectTrades.length > 0
+
+    const addStepPicker = canAddStep && (
+      <select
+        className="assignee-select"
+        value=""
+        onChange={e => quickAddStep(item, e.target.value)}
+        disabled={savingRow.has(item.id)}
+        aria-label={`Add a step to ${item.item_number}`}
+        title={isJob ? 'Add another step' : 'Split into steps: the current work becomes step 1'}
+        style={{ color: '#b0aea8', fontSize: 12, display: 'block', marginTop: isJob ? 0 : 2 }}
+      >
+        <option value="">+ step</option>
+        {projectTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+    )
+
+    return (
+      <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : nested ? { background: '#fbfbfa' } : undefined}>
+        <td style={{ width: 1 }}>
+          <input
+            type="checkbox"
+            aria-label={`Select ${item.item_number}`}
+            checked={selected.has(item.id)}
+            onChange={() => toggleSelected(item.id)}
+            style={checkboxStyle}
+          />
+        </td>
+        <td style={{ color: '#787774', fontSize: 13, whiteSpace: 'nowrap', paddingLeft: nested ? 22 : undefined }}>
+          {nested && <span aria-hidden style={{ color: '#c7c6c3', marginRight: 4 }}>↳</span>}
+          {item.item_number}
+        </td>
+        <td style={{ maxWidth: 260 }}>
+          {nested ? (
+            <Link href={`/maintenance/${item.id}`} style={{ textDecoration: 'none', fontSize: 13, color: item.description ? '#37352f' : '#9b9a97' }}>
+              <span style={{ color: '#787774', fontWeight: 500 }}>Step {stepNo}</span>
+              {' · '}{item.description?.split('\n')[0] ?? 'Same instructions as job'}
+            </Link>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isJob && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => toggleJob(item.id)}
+                    aria-label={collapsedJobs.has(item.id) ? `Show steps of ${item.item_number}` : `Hide steps of ${item.item_number}`}
+                    aria-expanded={!collapsedJobs.has(item.id)}
+                    style={{ padding: 0, color: '#787774' }}
+                  >
+                    {collapsedJobs.has(item.id) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
+                <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>
+                  {item.title}
+                </Link>
+              </div>
+              {isJob && (
+                <div style={{ fontSize: 11, marginTop: 2, paddingLeft: 20, color: '#787774' }}>
+                  {jobSteps.length} steps · {stepsDone}/{jobSteps.length} done
+                  {stepsUnassigned > 0 && <span style={{ color: '#d9730d', fontWeight: 500 }}> · {stepsUnassigned} need a contractor</span>}
+                </div>
+              )}
+              {item.parent_item_id && (
+                <div style={{ fontSize: 11, marginTop: 2, color: '#787774' }}>
+                  Step of{' '}
+                  <Link href={`/maintenance/${item.parent_item_id}`} style={{ color: '#2383e2', textDecoration: 'none' }}>
+                    {itemNumberById.get(item.parent_item_id) ?? 'its job'}
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </td>
+        <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{nested ? '' : unit?.project?.name ?? '—'}</td>
+        <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{nested ? '' : unit?.unit_identifier ?? '—'}</td>
+        <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{nested ? '' : unit?.address ?? '—'}</td>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          {isJob ? addStepPicker : (() => {
+            const tradeId = item.trade_id ?? (item.trade as any)?.id ?? ''
+            return (
+              <>
+                <select
+                  className="assignee-select"
+                  value={tradeId}
+                  onChange={e => changeTrade(item, e.target.value || null)}
+                  disabled={savingRow.has(item.id)}
+                  aria-label={`Trade for ${item.item_number}`}
+                  style={{ color: tradeId ? '#37352f' : '#b0aea8' }}
+                >
+                  <option value="">No trade</option>
+                  {projectTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {tradeId && !projectTrades.some(t => t.id === tradeId) && (
+                    <option value={tradeId}>{(item.trade as any)?.name ?? 'Unknown trade'}</option>
+                  )}
+                </select>
+                {addStepPicker}
+              </>
+            )
+          })()}
+        </td>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          {isJob ? (
+            <span style={{ fontSize: 12, color: '#9b9a97', paddingLeft: 6 }}>On each step</span>
+          ) : (() => {
+            const contractorId = item.contractor_id ?? (item.contractor as any)?.id ?? ''
+            return (
+              <select
+                className="assignee-select"
+                value={contractorId}
+                onChange={e => changeContractor(item, e.target.value || null)}
+                disabled={savingRow.has(item.id)}
+                aria-label={`Contractor for ${item.item_number}`}
+                style={{ color: contractorId ? '#37352f' : nested ? '#d9730d' : '#b0aea8' }}
+              >
+                <option value="">No contractor</option>
+                {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+                {contractorId && !contractors.some(c => c.id === contractorId) && (
+                  <option value={contractorId}>{(item.contractor as any)?.company_name ?? 'Unknown contractor'}</option>
+                )}
+              </select>
+            )
+          })()}
+        </td>
+        <td style={{ whiteSpace: 'nowrap' }}>
+          <select
+            className="assignee-select"
+            value={item.assigned_to ?? ''}
+            onChange={e => assignItems([item.id], e.target.value || null)}
+            disabled={assigning}
+            aria-label={`Assign ${item.item_number}`}
+            style={{ color: item.assigned_to ? '#37352f' : '#b0aea8', fontWeight: item.assigned_to === currentUserId ? 500 : undefined }}
+          >
+            <option value="">Unassigned</option>
+            {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
+            {item.assigned_to && !userById.has(item.assigned_to) && <option value={item.assigned_to}>Unknown user</option>}
+          </select>
+        </td>
+        <td><StatusBadge status={item.status} /></td>
+        <td style={{ fontSize: 13, color: isComplete ? '#1d6a38' : days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
+          {nested ? '' : `${days}d`}
+        </td>
+      </tr>
+    )
   }
 
   const hasFilters = !!(search || filterProject || filterUnit || filterStatus || filterContractor || filterAssignee)
@@ -518,147 +676,14 @@ export default function MaintenanceClient({ items: initial, projects, contractor
               </tr>
             </thead>
             <tbody>
-              {filtered.map(item => {
-                const days = getDaysSince(item.created_at)
-                const isComplete = item.status === 'complete'
-                const ageClass = getItemRowClass(item)
-                const unit = item.unit as any
-                return (
-                  <tr key={item.id} className={ageClass} style={selected.has(item.id) ? { background: '#f2f7fd' } : undefined}>
-                    <td style={{ width: 1 }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${item.item_number}`}
-                        checked={selected.has(item.id)}
-                        onChange={() => toggleSelected(item.id)}
-                        style={checkboxStyle}
-                      />
-                    </td>
-                    <td style={{ color: '#787774', fontSize: 13, whiteSpace: 'nowrap' }}>{item.item_number}</td>
-                    <td style={{ maxWidth: 240 }}>
-                      <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>
-                        {item.title}
-                      </Link>
-                    </td>
-                    <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.project?.name ?? '—'}</td>
-                    <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{unit?.unit_identifier ?? '—'}</td>
-                    <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{unit?.address ?? '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {(() => {
-                        const tradeId = item.trade_id ?? (item.trade as any)?.id ?? ''
-                        const projectTrades = tradesByProject.get(unit?.project?.id ?? unit?.project_id) ?? []
-                        return (
-                          <select
-                            className="assignee-select"
-                            value={tradeId}
-                            onChange={e => changeTrade(item, e.target.value || null)}
-                            disabled={savingRow.has(item.id)}
-                            aria-label={`Trade for ${item.item_number}`}
-                            style={{ color: tradeId ? '#37352f' : '#b0aea8' }}
-                          >
-                            <option value="">No trade</option>
-                            {projectTrades.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            {tradeId && !projectTrades.some(t => t.id === tradeId) && (
-                              <option value={tradeId}>{(item.trade as any)?.name ?? 'Unknown trade'}</option>
-                            )}
-                          </select>
-                        )
-                      })()}
-                      {/* Additional trades — one line each, lined up with their contractor in the next column */}
-                      {(item.extra_trades ?? []).map(t => (
-                        <div key={t.id} style={extraLineStyle}>
-                          <span style={{ color: '#6940a5', fontSize: 12, paddingLeft: 6 }}>+ {t.trade?.name ?? 'Trade'}</span>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            title={`Remove ${t.trade?.name ?? 'trade'}`}
-                            aria-label={`Remove ${t.trade?.name ?? 'trade'} from ${item.item_number}`}
-                            style={{ padding: '0 2px', color: '#b0aea8' }}
-                            onClick={() => removeExtraTrade(item, t)}
-                            disabled={savingRow.has(item.id)}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                      {(() => {
-                        const available = addableTrades(item)
-                        if (!available.length) return null
-                        return (
-                          <select
-                            className="assignee-select add-trade-select"
-                            value=""
-                            onChange={e => addExtraTrade(item, e.target.value)}
-                            disabled={savingRow.has(item.id)}
-                            aria-label={`Add another trade to ${item.item_number}`}
-                            title="Add another trade (e.g. Painting after General Building)"
-                            style={{ ...extraLineStyle, color: '#b0aea8', fontSize: 12 }}
-                          >
-                            <option value="">+ trade</option>
-                            {available.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                          </select>
-                        )
-                      })()}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      {(() => {
-                        const contractorId = item.contractor_id ?? (item.contractor as any)?.id ?? ''
-                        return (
-                          <select
-                            className="assignee-select"
-                            value={contractorId}
-                            onChange={e => changeContractor(item, e.target.value || null)}
-                            disabled={savingRow.has(item.id)}
-                            aria-label={`Contractor for ${item.item_number}`}
-                            style={{ color: contractorId ? '#37352f' : '#b0aea8' }}
-                          >
-                            <option value="">No contractor</option>
-                            {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-                            {contractorId && !contractors.some(c => c.id === contractorId) && (
-                              <option value={contractorId}>{(item.contractor as any)?.company_name ?? 'Unknown contractor'}</option>
-                            )}
-                          </select>
-                        )
-                      })()}
-                      {(item.extra_trades ?? []).map(t => (
-                        <div key={t.id} style={extraLineStyle}>
-                          <select
-                            className="assignee-select"
-                            value={t.contractor_id ?? ''}
-                            onChange={e => changeExtraContractor(item, t, e.target.value || null)}
-                            disabled={savingRow.has(item.id)}
-                            aria-label={`${t.trade?.name ?? 'Trade'} contractor for ${item.item_number}`}
-                            style={{ color: t.contractor_id ? '#37352f' : '#b0aea8', fontSize: 12 }}
-                          >
-                            <option value="">No contractor</option>
-                            {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-                          </select>
-                        </div>
-                      ))}
-                      {/* Keeps the rows above lined up with the trade column's "+ trade" picker */}
-                      {addableTrades(item).length > 0 && <div style={extraLineStyle} aria-hidden />}
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <select
-                        className="assignee-select"
-                        value={item.assigned_to ?? ''}
-                        onChange={e => assignItems([item.id], e.target.value || null)}
-                        disabled={assigning}
-                        aria-label={`Assign ${item.item_number}`}
-                        style={{ color: item.assigned_to ? '#37352f' : '#b0aea8', fontWeight: item.assigned_to === currentUserId ? 500 : undefined }}
-                      >
-                        <option value="">Unassigned</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
-                        {item.assigned_to && !userById.has(item.assigned_to) && <option value={item.assigned_to}>Unknown user</option>}
-                      </select>
-                    </td>
-                    <td><StatusBadge status={item.status} /></td>
-                    <td style={{ fontSize: 13, color: isComplete ? '#1d6a38' : days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
-                      {days}d
-                    </td>
-                  </tr>
-                )
-              })}
+              {displayRows.map(item => (
+                <Fragment key={item.id}>
+                  {renderRow(item, {})}
+                  {item.has_steps && !collapsedJobs.has(item.id) && (stepsByParent.get(item.id) ?? [])
+                    .filter(s => viewingArchived ? true : !s.archived_at)
+                    .map((s, i) => renderRow(s, { stepNo: i + 1 }))}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
@@ -679,5 +704,3 @@ export default function MaintenanceClient({ items: initial, projects, contractor
 }
 
 const checkboxStyle: React.CSSProperties = { width: 16, height: 16, cursor: 'pointer', accentColor: '#2383e2', display: 'block' }
-
-const extraLineStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 2, height: 26, marginTop: 2, boxSizing: 'border-box' }

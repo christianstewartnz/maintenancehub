@@ -75,8 +75,8 @@ async function unitIdsForProject(projectId: string) {
 async function resolveItemByNumber(itemNumber: string) {
   const { data } = await supabase
     .from('maintenance_items')
-    .select('id, item_number, title, status')
-    .eq('item_number', itemNumber)
+    .select('id, item_number, title, status, has_steps, parent_item_id, unit_id')
+    .eq('item_number', itemNumber.trim().toUpperCase())
     .single()
   return data
 }
@@ -770,8 +770,7 @@ server.tool(
         unit:units(unit_identifier, lot_number, address, owners:unit_owners(id, name, email, phone), project:projects(name)),
         trade:trades(name),
         contractor:contractors(company_name, email, phone),
-        work_order:work_orders(work_order_number),
-        extra_trades:maintenance_item_trades(sort_order, status, trade:trades(name), contractor:contractors(company_name))
+        work_order:work_orders(work_order_number)
       `)
       .eq('item_number', item_number)
       .single()
@@ -791,8 +790,21 @@ server.tool(
       .order('created_at', { ascending: false })
       .limit(20)
 
+    // Steps: a job lists its steps; a step names its job
+    const { data: steps } = await supabase
+      .from('maintenance_items')
+      .select('item_number, description, status, step_order, archived_at, trade:trades(name), contractor:contractors(company_name)')
+      .eq('parent_item_id', item.parent_item_id ?? item.id)
+      .order('step_order')
+    const { data: parentItem } = item.parent_item_id
+      ? await supabase.from('maintenance_items').select('item_number, title, description').eq('id', item.parent_item_id).single()
+      : { data: null }
+    const stepLines = (steps ?? []).filter(s => !s.archived_at).map((s, i) =>
+      `  ${i + 1}. ${s.item_number} | ${(s.trade as any)?.name ?? 'no trade'} | ${(s.contractor as any)?.company_name ?? 'NO CONTRACTOR'} | ${s.status}${s.item_number === item.item_number ? '  <- this step' : ''}${s.description ? ` | ${s.description.split('\n')[0]}` : ' | (same instructions as job)'}`)
+
     const u = item.unit as any
     const lines = [
+      ...(parentItem ? [`Step of job ${parentItem.item_number} — ${parentItem.title}`] : []),
       `[${item.item_number}] ${item.title}`,
       `Status: ${item.status}${item.archived_at ? ` (ARCHIVED ${new Date(item.archived_at).toLocaleDateString('en-NZ')})` : ''}`,
       `Project: ${(u?.project as any)?.name ?? '—'}`,
@@ -802,14 +814,12 @@ server.tool(
       u?.owners?.length ? `Owners: ${u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}${o.email ? ` <${o.email}>` : ''}`).join(', ')}` : 'Owner: —',
       `Trade: ${(item.trade as any)?.name ?? '—'}`,
       `Contractor: ${(item.contractor as any)?.company_name ?? '—'}`,
-      ...((item.extra_trades as any[]) ?? [])
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((t, i) => `Additional trade ${i + 2}: ${t.trade?.name ?? '?'} — ${t.contractor?.company_name ?? 'no contractor'} (${t.status})`),
       `Work Order: ${(item.work_order as any)?.work_order_number ?? '—'}`,
       `Scheduled date: ${item.scheduled_date ?? '—'}`,
       `Created: ${new Date(item.created_at).toLocaleDateString('en-NZ')}`,
       item.completed_at ? `Completed: ${new Date(item.completed_at).toLocaleDateString('en-NZ')}` : '',
-      `Description: ${item.description ?? '—'}`,
+      `Description: ${item.description ?? (parentItem?.description ? `(same as job) ${parentItem.description}` : '—')}`,
+      ...(stepLines.length ? [``, item.has_steps ? 'Steps (status follows these; the job has no contractor of its own):' : 'Steps on this job:', ...stepLines] : []),
       ``,
       `Comments (${comments?.length ?? 0}):`,
       ...(comments ?? []).map(c => `  [${new Date(c.created_at).toLocaleDateString('en-NZ')}] ${c.author}: ${c.content}`),
@@ -865,7 +875,10 @@ server.tool(
     const updates: Record<string, unknown> = {}
     if (title !== undefined) updates.title = title
     if (description !== undefined) updates.description = description
-    if (trade_id !== undefined) updates.trade_id = trade_id === '' ? null : trade_id
+    if (trade_id !== undefined) {
+      if (item.has_steps) return { content: [{ type: 'text', text: `${item_number} is split into steps — set the trade on a step (see get_maintenance_item).` }] }
+      updates.trade_id = trade_id === '' ? null : trade_id
+    }
 
     // New trade: switch to the project's contractor for it, if it has one
     let contractorNote = ''
@@ -875,7 +888,7 @@ server.tool(
         updates.contractor_id = contractorId
         if (item.status === 'logged') updates.status = 'assigned'
         const { data: c } = await supabase.from('contractors').select('company_name').eq('id', contractorId).single()
-        contractorNote = ` Contractor set to ${c?.company_name ?? 'the trade\'s contractor'}.`
+        contractorNote = ` Contractor set to ${c?.company_name ?? "the trade's contractor"}.`
       }
     }
 
@@ -885,120 +898,67 @@ server.tool(
   },
 )
 
-// ─── ADDITIONAL TRADES ─────────────────────────────────────────────────────
-// For jobs needing more than one trade, e.g. popped gib screws: General Building
-// refixes (the item's main trade), then Painting makes good (an additional trade).
-
-async function resolveItemTrade(itemId: string, tradeName: string) {
-  const { data } = await supabase
-    .from('maintenance_item_trades')
-    .select('id, status, contractor_id, trade:trades!inner(name)')
-    .eq('maintenance_item_id', itemId)
-    .ilike('trade.name', `%${tradeName}%`)
-    .limit(1)
-    .maybeSingle()
-  return data
-}
+// ─── STEPS ────────────────────────────────────────────────────────────────
+// A job (e.g. MI-0166 water pipes banging) can be split into ordered steps, each a
+// real item (MI-0166-1, -2, …) with its own instruction, trade, contractor and status,
+// shown in that contractor's portal. The first step added moves the job's current
+// trade/contractor into step 1. Same instructions for every trade (e.g. popped gib
+// screws: builder refix, then painter) = steps with no instructions of their own.
 
 server.tool(
-  'add_item_trade',
-  'Add an additional trade to a maintenance item (after its main trade), e.g. Painting after General Building refixes popped screws. The additional trade gets its own contractor (defaults to the project\'s contractor for that trade) and shows in that contractor\'s portal.',
+  'add_item_step',
+  "Split a maintenance item into steps / add a step to a job. The project's contractor for the trade is assigned automatically unless one is given. If the job has no steps yet, its current trade+contractor become step 1 first. Leave instructions empty to reuse the job's description.",
   {
-    item_number: z.string().describe('Item number e.g. "MI-0042"'),
-    trade: z.string().describe('Trade name on the item\'s project (partial match), e.g. "Painting"'),
-    contractor: z.string().optional().describe('Contractor company name (partial match). Omit to use the project\'s assigned contractor for the trade.'),
+    item_number: z.string().describe("The job's item number e.g. \"MI-0166\" (not a step number)"),
+    trade: z.string().describe('Trade name on the item\'s project (partial match), e.g. "General Building"'),
+    instructions: z.string().optional().describe("What this trade needs to do. Omit to use the job's description."),
+    contractor: z.string().optional().describe("Contractor company name (partial match). Omit for the project's contractor for the trade."),
+    before_step: z.string().optional().describe('Insert before this step number (e.g. "MI-0166-1"); omit to add at the end'),
   },
-  async ({ item_number, trade, contractor }) => {
-    const { data: item } = await supabase
-      .from('maintenance_items')
-      .select('id, item_number, trade_id, unit:units(project_id)')
-      .eq('item_number', item_number)
-      .single()
+  async ({ item_number, trade, instructions, contractor, before_step }) => {
+    const item = await resolveItemByNumber(item_number)
     if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
-    const projectId = (item.unit as any)?.project_id
-
+    if (item.parent_item_id) return { content: [{ type: 'text', text: `${item_number} is a step — add steps to its job instead.` }] }
+    const { data: unit } = await supabase.from('units').select('project_id').eq('id', item.unit_id).single()
     const { data: t } = await supabase
-      .from('trades').select('id, name').eq('project_id', projectId).ilike('name', `%${trade}%`).limit(1).maybeSingle()
+      .from('trades').select('id, name').eq('project_id', unit?.project_id).ilike('name', `%${trade}%`).limit(1).maybeSingle()
     if (!t) return { content: [{ type: 'text', text: `Trade "${trade}" not found on this item's project. Create it with create_trade first.` }] }
-    if (t.id === item.trade_id) return { content: [{ type: 'text', text: `${t.name} is already the main trade on ${item_number}.` }] }
-
     let contractorId: string | null = null
     if (contractor) {
       const c = await resolveContractor(contractor)
       if (!c) return { content: [{ type: 'text', text: `Contractor "${contractor}" not found.` }] }
       contractorId = c.id
-    } else {
-      const { data: a } = await supabase
-        .from('project_trade_assignments').select('contractor_id').eq('project_id', projectId).eq('trade_id', t.id).limit(1).maybeSingle()
-      contractorId = a?.contractor_id ?? null
     }
-
-    const { data: existing } = await supabase
-      .from('maintenance_item_trades').select('sort_order').eq('maintenance_item_id', item.id).order('sort_order', { ascending: false }).limit(1)
-    const sort_order = (existing?.[0]?.sort_order ?? 0) + 1
-
-    const { data, error } = await supabase
-      .from('maintenance_item_trades')
-      .insert({ maintenance_item_id: item.id, trade_id: t.id, contractor_id: contractorId, status: contractorId ? 'assigned' : 'logged', sort_order })
-      .select('contractor:contractors(company_name)')
-      .single()
+    let beforeId: string | null = null
+    if (before_step) {
+      const b = await resolveItemByNumber(before_step)
+      if (!b || b.parent_item_id !== item.id) return { content: [{ type: 'text', text: `${before_step} is not a step of ${item_number}.` }] }
+      beforeId = b.id
+    }
+    const { data: stepId, error } = await supabase.rpc('add_item_step', {
+      p_parent_id: item.id, p_trade_id: t.id, p_contractor_id: contractorId,
+      p_description: instructions ?? null, p_before_step_id: beforeId,
+    })
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Added ${t.name} to ${item_number}${(data?.contractor as any)?.company_name ? ` — ${(data!.contractor as any).company_name}` : ' (no contractor yet)'}.` }] }
+    const { data: step } = await supabase.from('maintenance_items')
+      .select('item_number, contractor:contractors(company_name)').eq('id', stepId as string).single()
+    return { content: [{ type: 'text', text: `Added ${step?.item_number} — ${t.name} → ${(step?.contractor as any)?.company_name ?? 'NO CONTRACTOR yet'}. Use get_maintenance_item ${item.item_number} to see all steps.` }] }
   },
 )
 
 server.tool(
-  'update_item_trade',
-  'Change the contractor or status of an additional trade on a maintenance item',
+  'move_item_step',
+  "Move a step earlier or later in its job's order (step numbers stay the same)",
   {
-    item_number: z.string().describe('Item number e.g. "MI-0042"'),
-    trade: z.string().describe('Additional trade name (partial match)'),
-    contractor: z.string().optional().describe('Contractor company name (partial match), or empty string to clear'),
-    status: z.enum(['logged', 'assigned', 'in_progress', 'contractor_complete', 'complete']).optional(),
+    step_number: z.string().describe('Step item number e.g. "MI-0166-2"'),
+    direction: z.enum(['up', 'down']),
   },
-  async ({ item_number, trade, contractor, status }) => {
-    const item = await resolveItemByNumber(item_number)
-    if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
-    const row = await resolveItemTrade(item.id, trade)
-    if (!row) return { content: [{ type: 'text', text: `${item_number} has no additional trade matching "${trade}".` }] }
-
-    const updates: Record<string, unknown> = {}
-    if (contractor !== undefined) {
-      if (contractor === '') updates.contractor_id = null
-      else {
-        const c = await resolveContractor(contractor)
-        if (!c) return { content: [{ type: 'text', text: `Contractor "${contractor}" not found.` }] }
-        updates.contractor_id = c.id
-      }
-      if (!status) {
-        if (updates.contractor_id && row.status === 'logged') updates.status = 'assigned'
-        else if (!updates.contractor_id && row.status === 'assigned') updates.status = 'logged'
-      }
-    }
-    if (status) updates.status = status
-    if (!Object.keys(updates).length) return { content: [{ type: 'text', text: 'Nothing to update.' }] }
-
-    const { error } = await supabase.from('maintenance_item_trades').update(updates).eq('id', row.id)
+  async ({ step_number, direction }) => {
+    const step = await resolveItemByNumber(step_number)
+    if (!step?.parent_item_id) return { content: [{ type: 'text', text: `${step_number} is not a step.` }] }
+    const { error } = await supabase.rpc('move_item_step', { p_step_id: step.id, p_direction: direction === 'up' ? -1 : 1 })
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `${item_number} — ${(row.trade as any)?.name} updated.` }] }
-  },
-)
-
-server.tool(
-  'remove_item_trade',
-  'Remove an additional trade from a maintenance item',
-  {
-    item_number: z.string().describe('Item number e.g. "MI-0042"'),
-    trade: z.string().describe('Additional trade name (partial match)'),
-  },
-  async ({ item_number, trade }) => {
-    const item = await resolveItemByNumber(item_number)
-    if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
-    const row = await resolveItemTrade(item.id, trade)
-    if (!row) return { content: [{ type: 'text', text: `${item_number} has no additional trade matching "${trade}".` }] }
-    const { error } = await supabase.from('maintenance_item_trades').delete().eq('id', row.id)
-    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `Removed ${(row.trade as any)?.name} from ${item_number}.` }] }
+    return { content: [{ type: 'text', text: `Moved ${step_number} ${direction}.` }] }
   },
 )
 
@@ -1014,6 +974,9 @@ server.tool(
     const item = await resolveItemByNumber(item_number)
     if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
 
+    if (item.has_steps && status !== 'complete') {
+      return { content: [{ type: 'text', text: `${item_number} is split into steps, so its status follows them. Update the relevant step instead (or set "complete" to sign off the whole job and all its steps).` }] }
+    }
     const update: Record<string, unknown> = { status }
     if (status === 'complete') update.completed_at = new Date().toISOString()
 

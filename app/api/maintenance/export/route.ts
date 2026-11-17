@@ -34,6 +34,7 @@ export async function GET(request: Request) {
       trade:trades(name),
       contractor:contractors(company_name, contact_name)
     `)
+    .eq('has_steps', false) // a job split into steps exports as its steps (MI-0166-1, -2…), each with its own trade/contractor
     .order('item_number')
 
   let projectName: string | null = null
