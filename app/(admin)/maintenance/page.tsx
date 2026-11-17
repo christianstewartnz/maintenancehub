@@ -35,6 +35,7 @@ export default async function MaintenancePage() {
         users={usersRes.data ?? []}
         trades={tradesRes.data ?? []}
         tradeAssignments={tradeAssignments ?? []}
+        renderedAt={Date.now()}
         currentUserId={user?.id ?? ''}
       />
     </div>

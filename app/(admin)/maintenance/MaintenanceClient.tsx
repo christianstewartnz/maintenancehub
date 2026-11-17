@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Archive, ArchiveRestore, CheckCheck, ChevronDown, ChevronRight, Download, Plus, Search, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, CheckCheck, ChevronDown, ChevronRight, Pencil, Download, Plus, Search, X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
@@ -14,6 +14,9 @@ import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '
 
 const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
 
+/** Server renders of the list already shown in this tab (survives client-side navigation). */
+const shownRenders = new Set<number>()
+
 interface Props {
   items: MaintenanceItem[]
   projects: { id: string; name: string }[]
@@ -23,10 +26,15 @@ interface Props {
   /** Each project's usual contractor per trade, used when a trade is picked. */
   tradeAssignments: { project_id: string; trade_id: string; contractor_id: string }[]
   currentUserId: string
+  /** When the server rendered this list (ms). Used to spot a stale copy restored by Back. */
+  renderedAt: number
 }
 
-export default function MaintenanceClient({ items: initial, projects, contractors, users, trades, tradeAssignments, currentUserId }: Props) {
+export default function MaintenanceClient({ items: initial, projects, contractors, users, trades, tradeAssignments, currentUserId, renderedAt }: Props) {
   const [items, setItems] = useState(initial)
+  // Take fresh server data whenever it arrives (e.g. after router.refresh())
+  const [seenInitial, setSeenInitial] = useState(initial)
+  if (initial !== seenInitial) { setSeenInitial(initial); setItems(initial) }
   const [showCreate, setShowCreate] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [search, setSearch] = useSessionState('maintenance.search', '')
@@ -44,6 +52,15 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [archiving, setArchiving] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+
+  // Back/forward shows the list as it was when you left it (Next's router cache), which
+  // misses changes made since — e.g. steps added or reordered. A server render we've
+  // already shown before means this is that cached copy, so fetch a fresh one.
+  useEffect(() => {
+    if (shownRenders.has(renderedAt)) router.refresh()
+    shownRenders.add(renderedAt)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- check once per mount
+  }, [])
 
   // Remember each person's assignee filter on this browser.
   // Read after mount (not in useState's initialiser) so server and client render the same HTML.
@@ -308,7 +325,91 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     markSaving(item.id, false)
   }
 
-  function renderRow(item: MaintenanceItem, { stepNo }: { stepNo?: number }) {
+  /** Move a step earlier/later in its job. Swaps locally straight away, then re-fetches the job. */
+  async function moveStep(step: MaintenanceItem, direction: -1 | 1) {
+    if (!step.parent_item_id) return
+    const siblings = (stepsByParent.get(step.parent_item_id) ?? []).filter(s => !s.archived_at)
+    const idx = siblings.findIndex(s => s.id === step.id)
+    const other = siblings[idx + direction]
+    if (!other) return
+    markSaving(step.parent_item_id, true)
+    setItems(prev => prev.map(i =>
+      i.id === step.id ? { ...i, step_order: other.step_order }
+      : i.id === other.id ? { ...i, step_order: step.step_order }
+      : i))
+    const { error } = await supabase.rpc('move_item_step', { p_step_id: step.id, p_direction: direction })
+    if (error) alert(`Couldn't move step: ${error.message}`)
+    await reloadJob(step.parent_item_id)
+    markSaving(step.parent_item_id, false)
+  }
+
+  // ---- Inline edit of a step's heading and instructions ----
+  const [editingStep, setEditingStep] = useState<{ id: string; title: string; description: string } | null>(null)
+  const [savingStep, setSavingStep] = useState(false)
+
+  function startEditStep(step: MaintenanceItem, jobTitle: string) {
+    // A heading equal to the job's is the default, so start the box empty
+    setEditingStep({ id: step.id, title: step.title === jobTitle ? '' : step.title, description: step.description ?? '' })
+  }
+
+  async function saveStep(step: MaintenanceItem, job: MaintenanceItem) {
+    if (!editingStep) return
+    setSavingStep(true)
+    const title = editingStep.title.trim() || job.title
+    const description = editingStep.description.trim() || null
+    const { error } = await supabase.from('maintenance_items').update({ title, description }).eq('id', step.id)
+    if (error) alert(`Couldn't save step: ${error.message}`)
+    else {
+      setItems(prev => prev.map(i => i.id === step.id ? { ...i, title, description } : i))
+      setEditingStep(null)
+      router.refresh()
+    }
+    setSavingStep(false)
+  }
+
+  function renderStepEditor(step: MaintenanceItem, job: MaintenanceItem) {
+    if (!editingStep) return null
+    return (
+      <tr key={`${step.id}-edit`} style={{ background: '#fbfbfa' }}>
+        <td />
+        <td colSpan={10} style={{ paddingTop: 4, paddingBottom: 12 }}>
+          <form
+            onSubmit={e => { e.preventDefault(); saveStep(step, job) }}
+            onKeyDown={e => { if (e.key === 'Escape') setEditingStep(null) }}
+            style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(240px, 2fr) auto', gap: 8, alignItems: 'start', maxWidth: 1000 }}
+          >
+            <div>
+              <label style={stepEditLabel}>Heading — {step.item_number}</label>
+              <input
+                className="input"
+                autoFocus
+                value={editingStep.title}
+                onChange={e => setEditingStep(s => s && { ...s, title: e.target.value })}
+                placeholder={job.title}
+                style={{ fontSize: 13 }}
+              />
+            </div>
+            <div>
+              <label style={stepEditLabel}>Instructions for this step</label>
+              <textarea
+                className="input"
+                value={editingStep.description}
+                onChange={e => setEditingStep(s => s && { ...s, description: e.target.value })}
+                placeholder="Leave blank to use the job's instructions"
+                style={{ fontSize: 13, minHeight: 60 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 6, paddingTop: 18 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setEditingStep(null)} disabled={savingStep}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={savingStep}>{savingStep ? 'Saving…' : 'Save'}</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+    )
+  }
+
+  function renderRow(item: MaintenanceItem, { stepNo, stepCount, jobTitle }: { stepNo?: number; stepCount?: number; jobTitle?: string }) {
     const days = getDaysSince(item.created_at)
     const isComplete = item.status === 'complete'
     const ageClass = getItemRowClass(item)
@@ -353,10 +454,53 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         </td>
         <td style={{ maxWidth: 260 }}>
           {nested ? (
-            <Link href={`/maintenance/${item.id}`} style={{ textDecoration: 'none', fontSize: 13, color: item.description ? '#37352f' : '#9b9a97' }}>
-              <span style={{ color: '#787774', fontWeight: 500 }}>Step {stepNo}</span>
-              {' · '}{item.description?.split('\n')[0] ?? 'Same instructions as job'}
-            </Link>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <Link href={`/maintenance/${item.id}`} style={{ flex: 1, textDecoration: 'none', fontSize: 13 }}>
+                <span style={{ color: '#787774', fontWeight: 500 }}>Step {stepNo}</span>
+                {item.title !== jobTitle && <span style={{ color: '#37352f', fontWeight: 500 }}>{' · '}{item.title}</span>}
+                <span style={{ display: 'block', color: item.description ? '#37352f' : '#9b9a97' }}>
+                  {item.description?.split('\n')[0] ?? 'Same instructions as job'}
+                </span>
+              </Link>
+              {!item.archived_at && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => editingStep?.id === item.id ? setEditingStep(null) : startEditStep(item, jobTitle ?? '')}
+                  title="Edit heading and instructions"
+                  aria-label={`Edit ${item.item_number}`}
+                  style={{ ...stepArrowStyle, padding: '3px 4px', flexShrink: 0 }}
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+              {(stepCount ?? 0) > 1 && !item.archived_at && (
+                <span style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => moveStep(item, -1)}
+                    disabled={stepNo === 1 || savingRow.has(item.parent_item_id ?? '')}
+                    title="Move step up"
+                    aria-label={`Move ${item.item_number} up`}
+                    style={stepArrowStyle}
+                  >
+                    <ArrowUp size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => moveStep(item, 1)}
+                    disabled={stepNo === stepCount || savingRow.has(item.parent_item_id ?? '')}
+                    title="Move step down"
+                    aria-label={`Move ${item.item_number} down`}
+                    style={stepArrowStyle}
+                  >
+                    <ArrowDown size={13} />
+                  </button>
+                </span>
+              )}
+            </div>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -681,7 +825,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                   {renderRow(item, {})}
                   {item.has_steps && !collapsedJobs.has(item.id) && (stepsByParent.get(item.id) ?? [])
                     .filter(s => viewingArchived ? true : !s.archived_at)
-                    .map((s, i) => renderRow(s, { stepNo: i + 1 }))}
+                    .map((s, i, all) => (
+                      <Fragment key={s.id}>
+                        {renderRow(s, { stepNo: i + 1, stepCount: all.length, jobTitle: item.title })}
+                        {editingStep?.id === s.id && renderStepEditor(s, item)}
+                      </Fragment>
+                    ))}
                 </Fragment>
               ))}
             </tbody>
@@ -702,5 +851,9 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     </div>
   )
 }
+
+const stepEditLabel: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: '#787774', marginBottom: 4 }
+
+const stepArrowStyle: React.CSSProperties = { padding: '1px 3px', color: '#9b9a97', lineHeight: 0 }
 
 const checkboxStyle: React.CSSProperties = { width: 16, height: 16, cursor: 'pointer', accentColor: '#2383e2', display: 'block' }
