@@ -427,7 +427,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 4 }}>
       <span style={{ color: '#787774', minWidth: 48, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: '#37352f' }}>{value}</span>
+      <span style={{ color: '#37352f', minWidth: 0, overflowWrap: 'anywhere' }}>{value}</span>
     </div>
   )
 }
