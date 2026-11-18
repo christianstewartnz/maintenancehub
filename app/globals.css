@@ -130,6 +130,17 @@ body {
   background: #f7f7f5;
 }
 
+/* Wide tables: tighter cells */
+.data-table-compact th, .data-table-compact td { padding-left: 8px; padding-right: 8px; }
+
+/* Scroll box for tables wider than the screen. Capped at the viewport height so
+   the sideways scrollbar is always on screen, with the header row pinned. */
+.table-scroll { overflow: auto; max-height: max(320px, calc(100vh - var(--table-top, 0px) - 24px)); }
+
+/* Columns that repeat other columns (e.g. Address = Construction No. + Project): only on wide screens */
+@media (max-width: 1650px) { .hide-narrow { display: none; } }
+.table-scroll .data-table thead th { position: sticky; top: 0; z-index: 2; background: white; }
+
 /* ── Form elements ──────────────────────────────────────────────────── */
 .input {
   width: 100%;
@@ -164,7 +175,7 @@ select.input {
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
-  max-width: 160px;
+  max-width: 140px;
 }
 .assignee-select:hover, .assignee-select:focus { border-color: #e9e9e7; background: white; outline: none; }
 
@@ -373,6 +384,7 @@ select.input {
   .data-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .data-table td { white-space: nowrap; }
   .data-table td.wrap-mobile { white-space: normal; min-width: 180px; }
+  .table-scroll { max-height: none; }
 
   /* Toolbars of filter dropdowns — two per row instead of one */
   .toolbar-mobile > select, .toolbar-mobile > .btn { flex: 1 1 calc(50% - 10px) !important; width: auto !important; min-width: 0 !important; }

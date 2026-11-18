@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, Fragment } from 'react'
+import { useState, useMemo, useEffect, useCallback, Fragment } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Archive, ArchiveRestore, ArrowDown, ArrowUp, CheckCheck, ChevronDown, ChevronRight, Pencil, Download, Plus, Search, X } from 'lucide-react'
@@ -61,6 +61,23 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     if (shownRenders.has(renderedAt)) router.refresh()
     shownRenders.add(renderedAt)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- check once per mount
+  }, [])
+
+  // The table scrolls inside its own box, sized to end at the bottom of the screen so its
+  // sideways scrollbar is always visible. Record where the box starts (it moves when the
+  // filter bar wraps or the bulk-action bar appears); CSS uses it for the max height.
+  const tableScrollRef = useCallback((el: HTMLDivElement | null) => {
+    const main = el?.closest('main')
+    if (!el || !main) return
+    const fit = () => {
+      const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop
+      el.style.setProperty('--table-top', `${Math.round(top)}px`)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    if (el.parentElement) ro.observe(el.parentElement)
+    window.addEventListener('resize', fit)
+    return () => { ro.disconnect(); window.removeEventListener('resize', fit) }
   }, [])
 
   // Remember each person's assignee filter on this browser.
@@ -449,7 +466,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           {nested && <span aria-hidden style={{ color: '#c7c6c3', marginRight: 4 }}>↳</span>}
           {item.item_number}
         </td>
-        <td className="wrap-mobile" style={{ maxWidth: 260 }}>
+        <td className="wrap-mobile" style={{ minWidth: 200, maxWidth: 280 }}>
           {nested ? (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
               <Link href={`/maintenance/${item.id}`} style={{ flex: 1, textDecoration: 'none', fontSize: 13 }}>
@@ -536,7 +553,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         </td>
         <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{nested ? '' : unit?.project?.name ?? '—'}</td>
         <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{nested ? '' : unit?.unit_identifier ?? '—'}</td>
-        <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{nested ? '' : unit?.address ?? '—'}</td>
+        <td className="hide-narrow" style={{ fontSize: 13, color: '#787774', minWidth: 140, maxWidth: 220 }}>{nested ? '' : unit?.address ?? '—'}</td>
         <td style={{ whiteSpace: 'nowrap' }}>
           {isJob ? addStepPicker : (() => {
             const tradeId = item.trade_id ?? (item.trade as any)?.id ?? ''
@@ -796,8 +813,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           )}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
+        <div className="table-scroll" ref={tableScrollRef}>
+          <table className="data-table data-table-compact">
             <thead>
               <tr>
                 <th style={{ width: 1 }}>
@@ -811,7 +828,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     style={checkboxStyle}
                   />
                 </th>
-                <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Address</th>
+                <th>#</th><th>Title</th><th>Project</th><th style={{ whiteSpace: 'normal' }}>Construction No.</th><th className="hide-narrow">Address</th>
                 <th>Trade</th><th>Contractor</th><th>Responsible</th><th>Status</th>
                 <th>Age</th>
               </tr>
