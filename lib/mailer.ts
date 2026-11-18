@@ -23,6 +23,7 @@ export interface SendEmailOptions {
   html: string
   text?: string
   replyTo?: string | null
+  cc?: string | null
   attachments?: EmailAttachment[]
 }
 
@@ -197,6 +198,8 @@ export async function sendEmail(opts: SendEmailOptions): Promise<{ error: string
     await getTransporter().sendMail({
       from,
       to: opts.to,
+      // Skip a CC that just repeats the recipient.
+      cc: opts.cc && opts.cc.toLowerCase() !== opts.to.toLowerCase() ? opts.cc : undefined,
       replyTo,
       subject: opts.subject,
       html: opts.html,

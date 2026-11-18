@@ -17,7 +17,6 @@ interface PendingItem {
  *  - mode 'email' (default): email the contractor a summary of their pending
  *    items + portal link, then stamp those items as notified.
  *  - mode 'mark': stamp them as notified without sending (e.g. told by phone).
- *  - mode 'test': send the same email to the signed-in user only; nothing is stamped.
  *
  * `item_ids` limits the action to the items the admin previewed, so an item
  * assigned while the dialog was open isn't silently marked as told.
@@ -33,7 +32,7 @@ export async function POST(
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({})) as { mode?: string; item_ids?: unknown }
-  const mode = body.mode === 'mark' ? 'mark' : body.mode === 'test' ? 'test' : 'email'
+  const mode = body.mode === 'mark' ? 'mark' : 'email'
   const onlyIds = Array.isArray(body.item_ids) ? body.item_ids.filter((x): x is string => typeof x === 'string') : null
 
   const { data: contractor } = await supabase
@@ -60,8 +59,8 @@ export async function POST(
     return Response.json({ error: 'No new items to notify this contractor about' }, { status: 400 })
   }
 
-  if (mode === 'email' || mode === 'test') {
-    if (mode === 'email' && !contractor.email) {
+  if (mode === 'email') {
+    if (!contractor.email) {
       return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
     }
     if (!isEmailConfigured()) {
@@ -85,17 +84,9 @@ export async function POST(
     })
 
     // Replies go to whoever clicked Notify; EMAIL_REPLY_TO is a fallback for users without an email.
+    // They're also CC'd so they have a copy of what was sent.
     const replyTo = user.email ?? process.env.EMAIL_REPLY_TO
-
-    if (mode === 'test') {
-      // Send the exact contractor email to the signed-in user instead; stamp nothing.
-      if (!user.email) return Response.json({ error: 'Your account has no email address to send the test to' }, { status: 400 })
-      const { error: testError } = await sendEmail({ to: user.email, replyTo, subject: `[TEST] ${subject}`, html, text })
-      if (testError) return Response.json({ error: testError }, { status: 500 })
-      return Response.json({ success: true, mode, to: user.email })
-    }
-
-    const { error: emailError } = await sendEmail({ to: contractor.email!, replyTo, subject, html, text })
+    const { error: emailError } = await sendEmail({ to: contractor.email, cc: user.email, replyTo, subject, html, text })
     if (emailError) return Response.json({ error: emailError }, { status: 500 })
   }
 
