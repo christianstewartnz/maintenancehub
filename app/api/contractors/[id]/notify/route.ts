@@ -7,7 +7,12 @@ interface PendingItem {
   id: string
   item_number: string
   title: string
-  unit: { unit_identifier: string | null; address: string | null; project: { name: string } | null } | null
+  unit: {
+    unit_identifier: string | null
+    address: string | null
+    project: { name: string } | null
+    owners: { name: string; email: string | null; phone: string | null }[] | null
+  } | null
 }
 
 /**
@@ -44,7 +49,7 @@ export async function POST(
 
   let query = supabase
     .from('maintenance_items')
-    .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
+    .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name), owners:unit_owners(name, email, phone))')
     .eq('contractor_id', id)
     .is('contractor_notified_at', null)
     .eq('portal_hidden', false)
@@ -80,6 +85,7 @@ export async function POST(
         unitIdentifier: i.unit?.unit_identifier ?? null,
         address: i.unit?.address ?? null,
         projectName: i.unit?.project?.name ?? null,
+        owners: i.unit?.owners ?? [],
       })),
     })
 

@@ -84,10 +84,24 @@ function esc(s: string | null | undefined): string {
     .replace(/"/g, '&quot;')
 }
 
+/** Trimmed owners with a name, so blank rows don't print an empty "Owner:" line. */
+function ownerLines(owners: { name: string; email: string | null; phone: string | null }[] | undefined) {
+  return (owners ?? [])
+    .map(o => ({ name: o.name?.trim() ?? '', phone: o.phone?.trim() || null, email: o.email?.trim() || null }))
+    .filter(o => o.name)
+}
+
 export function contractorNewItemsEmail(opts: {
   contractorName: string
   contactName: string | null
-  items: { itemNumber: string; title: string; unitIdentifier: string | null; address: string | null; projectName: string | null }[]
+  items: {
+    itemNumber: string
+    title: string
+    unitIdentifier: string | null
+    address: string | null
+    projectName: string | null
+    owners?: { name: string; email: string | null; phone: string | null }[]
+  }[]
   portalUrl: string
   /** The staff member who clicked Notify; shown as the sign-off. */
   sender?: { name: string | null; email: string | null }
@@ -117,6 +131,9 @@ export function contractorNewItemsEmail(opts: {
             ${i.unitIdentifier?.trim() && i.address?.trim()
               ? `${esc(i.unitIdentifier.trim())}<br>${esc(i.address.trim())}`
               : esc(formatUnitLabel({ unit_identifier: i.unitIdentifier, address: i.address }))}
+            ${ownerLines(i.owners).map(o => `
+              <div style="margin-top: 6px; color: #37352f;">Owner: ${esc(o.name)}${o.phone ? ` · <a href="tel:${esc(o.phone.replace(/\s+/g, ''))}" style="color: #2383e2;">${esc(o.phone)}</a>` : ''}${o.email ? `<br><a href="mailto:${esc(o.email)}" style="color: #2383e2;">${esc(o.email)}</a>` : ''}</div>
+            `).join('')}
           </td>
         </tr>
       `).join('')}
@@ -131,7 +148,10 @@ export function contractorNewItemsEmail(opts: {
     ...Array.from(byProject.entries()).flatMap(([project, list]) => [
       '',
       project,
-      ...list.map(i => `  ${i.itemNumber}  ${i.title}${i.unitIdentifier?.trim() || i.address?.trim() ? `  (${formatUnitLabel({ unit_identifier: i.unitIdentifier, address: i.address }, '', ', ')})` : ''}`),
+      ...list.flatMap(i => [
+        `  ${i.itemNumber}  ${i.title}${i.unitIdentifier?.trim() || i.address?.trim() ? `  (${formatUnitLabel({ unit_identifier: i.unitIdentifier, address: i.address }, '', ', ')})` : ''}`,
+        ...ownerLines(i.owners).map(o => `      Owner: ${[o.name, o.phone, o.email].filter(Boolean).join(' · ')}`),
+      ]),
     ]),
     '',
     'Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.',
