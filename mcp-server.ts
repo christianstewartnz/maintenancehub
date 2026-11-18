@@ -770,7 +770,8 @@ server.tool(
         unit:units(unit_identifier, lot_number, address, owners:unit_owners(id, name, email, phone), project:projects(name)),
         trade:trades(name),
         contractor:contractors(company_name, email, phone),
-        work_order:work_orders(work_order_number)
+        work_order:work_orders(work_order_number),
+        assignee:profiles!maintenance_items_assigned_to_fkey(full_name, email)
       `)
       .eq('item_number', item_number)
       .single()
@@ -813,6 +814,7 @@ server.tool(
       `Address: ${u?.address ?? '—'}`,
       u?.owners?.length ? `Owners: ${u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}${o.email ? ` <${o.email}>` : ''}`).join(', ')}` : 'Owner: —',
       `Trade: ${(item.trade as any)?.name ?? '—'}`,
+      `Responsible (staff): ${item.assignee ? staffName(item.assignee as any) : 'No one'}`,
       `Contractor: ${(item.contractor as any)?.company_name ?? '—'}`,
       `Work Order: ${(item.work_order as any)?.work_order_number ?? '—'}`,
       `Scheduled date: ${item.scheduled_date ?? '—'}`,
@@ -1080,10 +1082,11 @@ server.tool(
 )
 
 server.tool(
-  'assign_contractor',
-  'Assign a contractor to a maintenance item',
+  'set_item_contractor',
+  'Change which CONTRACTOR (outside trade company, e.g. Boundaryline) does the work on a maintenance item. ' +
+    'This is NOT the internal "Responsible" staff field — "assign to me / make <staff> responsible" means that: use assign_item_to_staff.',
   {
-    item_number: z.string().describe('Item number e.g. "MH-0042"'),
+    item_number: z.string().describe('Item number e.g. "MI-0042"'),
     contractor: z.string().describe('Contractor company name (partial match)'),
   },
   async ({ item_number, contractor }) => {
@@ -1104,7 +1107,66 @@ server.tool(
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     await logActivity(item.id, `Contractor assigned: ${c.company_name}`)
     const note = updated?.status === 'logged' ? ' Stays Logged until the contractor is notified.' : ''
-    return { content: [{ type: 'text', text: `${item_number} assigned to ${c.company_name} (status: ${updated?.status}).${note}` }] }
+    return { content: [{ type: 'text', text: `${item_number} contractor set to ${c.company_name} (status: ${updated?.status}).${note}` }] }
+  },
+)
+
+// ─── STAFF ("Assigned to") ──────────────────────────────────────────────────
+
+/** Find a Maintenance Hub user (profiles) by name or email, partial match. */
+async function resolveStaff(nameOrEmail: string) {
+  const q = nameOrEmail.trim()
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, email, full_name')
+    .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+  return data ?? []
+}
+
+const staffName = (p: { full_name: string | null; email: string | null }) =>
+  p.full_name?.trim() || p.email?.split('@')[0] || 'Unknown user'
+
+server.tool(
+  'list_staff',
+  'List internal Maintenance Hub staff (app users) who can be "Responsible" for items. These are not contractors.',
+  {},
+  async () => {
+    const { data, error } = await supabase.from('profiles').select('id, email, full_name').order('full_name')
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    const text = (data ?? []).map(p => `• ${staffName(p)} | ${p.email ?? '—'} [id: ${p.id}]`).join('\n')
+    return { content: [{ type: 'text', text: text || 'No staff found.' }] }
+  },
+)
+
+server.tool(
+  'assign_item_to_staff',
+  'Set the internal "Responsible" staff member on a maintenance item (shown as "Assigned to" in older wording). ' +
+    'Use this for "assign MI-0042 to me / to Sarah". Does not change the contractor or the status. ' +
+    'Pass staff "unassigned" to clear it.',
+  {
+    item_number: z.string().describe('Item number e.g. "MI-0042"'),
+    staff: z.string().describe('Staff member name or email (partial match), or "unassigned"'),
+  },
+  async ({ item_number, staff }) => {
+    const item = await resolveItemByNumber(item_number)
+    if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
+
+    let assignedTo: string | null = null
+    let label = 'No one'
+    if (staff.trim().toLowerCase() !== 'unassigned') {
+      const matches = await resolveStaff(staff)
+      if (!matches.length) return { content: [{ type: 'text', text: `No staff member matches "${staff}". Use list_staff.` }] }
+      if (matches.length > 1) {
+        return { content: [{ type: 'text', text: `"${staff}" matches several staff — be more specific:\n${matches.map(p => `• ${staffName(p)} | ${p.email ?? '—'}`).join('\n')}` }] }
+      }
+      assignedTo = matches[0].id
+      label = staffName(matches[0])
+    }
+
+    // The DB trigger logs 'assignee_changed' in the activity log
+    const { error } = await supabase.from('maintenance_items').update({ assigned_to: assignedTo }).eq('id', item.id)
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    return { content: [{ type: 'text', text: `${item.item_number} — ${item.title}: Responsible — ${label}.` }] }
   },
 )
 

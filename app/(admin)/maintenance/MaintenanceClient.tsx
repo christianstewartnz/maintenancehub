@@ -590,10 +590,10 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             value={item.assigned_to ?? ''}
             onChange={e => assignItems([item.id], e.target.value || null)}
             disabled={assigning}
-            aria-label={`Assign ${item.item_number}`}
+            aria-label={`Responsible for ${item.item_number}`}
             style={{ color: item.assigned_to ? '#37352f' : '#b0aea8', fontWeight: item.assigned_to === currentUserId ? 500 : undefined }}
           >
-            <option value="">Unassigned</option>
+            <option value="">No one</option>
             {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
             {item.assigned_to && !userById.has(item.assigned_to) && <option value={item.assigned_to}>Unknown user</option>}
           </select>
@@ -661,12 +661,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           style={{ flex: '0 0 auto', width: 'auto', ...(filterAssignee ? { borderColor: '#2383e2', color: '#2383e2' } : {}) }}
           value={filterAssignee}
           onChange={e => changeAssigneeFilter(e.target.value)}
-          aria-label="Filter by assignee"
+          aria-label="Filter by who's responsible"
         >
           <option value="">Everyone&apos;s items</option>
-          <option value={ASSIGNEE_ME}>My items + unassigned</option>
+          <option value={ASSIGNEE_ME}>Mine + no one responsible</option>
           {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
-          <option value={ASSIGNEE_UNASSIGNED}>Only unassigned</option>
+          <option value={ASSIGNEE_UNASSIGNED}>Only no one responsible</option>
         </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }}>
           <option value="">All Projects</option>
@@ -727,18 +727,18 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} onClick={() => setSelected(new Set())}>
             Clear
           </button>
-          {/* Picking a person only stages the choice; the Assign button applies it */}
+          {/* Picking a person only stages the choice; the Set button applies it */}
           <select
             className="input"
             style={{ marginLeft: 'auto', width: 'auto', fontSize: 13 }}
             value={bulkAssignee}
             disabled={assigning}
-            aria-label="Assign selected items"
+            aria-label="Set who's responsible for the selected items"
             onChange={e => setBulkAssignee(e.target.value)}
           >
-            <option value="">{`Assign ${selectedVisible.length} to…`}</option>
+            <option value="">Responsible…</option>
             {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
-            <option value={ASSIGNEE_UNASSIGNED}>Unassigned (everyone)</option>
+            <option value={ASSIGNEE_UNASSIGNED}>No one (everyone)</option>
           </select>
           {bulkAssignee && (
             <>
@@ -750,7 +750,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                   setBulkAssignee('')
                 }}
               >
-                {assigning ? 'Assigning…' : `Assign ${selectedVisible.length}`}
+                {assigning ? 'Saving…' : `Set for ${selectedVisible.length}`}
               </button>
               <button className="btn btn-ghost" style={{ fontSize: 13, color: '#787774', padding: '4px 8px' }} disabled={assigning} onClick={() => setBulkAssignee('')}>
                 Cancel
@@ -812,7 +812,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                   />
                 </th>
                 <th>#</th><th>Title</th><th>Project</th><th>Construction No.</th><th>Address</th>
-                <th>Trade</th><th>Contractor</th><th>Assigned to</th><th>Status</th>
+                <th>Trade</th><th>Contractor</th><th>Responsible</th><th>Status</th>
                 <th>Age</th>
               </tr>
             </thead>

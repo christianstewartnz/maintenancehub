@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-/** Lets each user set the name shown in "Assigned to" pickers and filters. */
+/** Lets each user set the name shown in "Responsible" pickers and filters. */
 export default function ProfileNameCard({ userId, email, fullName }: { userId: string; email: string | null; fullName: string | null }) {
   const [name, setName] = useState(fullName ?? '')
   const [saving, setSaving] = useState(false)

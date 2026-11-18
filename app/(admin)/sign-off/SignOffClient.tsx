@@ -223,12 +223,12 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
             style={{ flex: '0 0 auto', width: 'auto', ...(filterAssignee ? { borderColor: '#2383e2', color: '#2383e2' } : {}) }}
             value={filterAssignee}
             onChange={e => changeAssigneeFilter(e.target.value)}
-            aria-label="Filter by assignee"
+            aria-label="Filter by who's responsible"
           >
             <option value="">Everyone&apos;s items</option>
-            <option value={ASSIGNEE_ME}>My items + unassigned</option>
+            <option value={ASSIGNEE_ME}>Mine + no one responsible</option>
             {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
-            <option value={ASSIGNEE_UNASSIGNED}>Only unassigned</option>
+            <option value={ASSIGNEE_UNASSIGNED}>Only no one responsible</option>
           </select>
           <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }} aria-label="Filter by project">
             <option value="">All Projects</option>

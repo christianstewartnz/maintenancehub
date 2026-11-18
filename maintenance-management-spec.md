@@ -367,7 +367,8 @@ A custom MCP server that connects to the Supabase database and exposes tools for
 
 **Write tools (actions):**
 - `create_maintenance_item` — log a new item against a unit
-- `assign_contractor` — assign a contractor to a maintenance item
+- `set_item_contractor` — change the contractor on a maintenance item (not the staff "Assigned to")
+- `assign_item_to_staff` / `list_staff` — set the internal staff "Assigned to" on an item
 - `update_item_status` — change status (with audit log entry)
 - `create_work_order` — create and optionally send a work order
 - `create_unit` — add a unit to a project (supports bulk from parsed spreadsheet data)
@@ -377,7 +378,7 @@ A custom MCP server that connects to the Supabase database and exposes tools for
 
 This allows workflows like:
 - *"What's overdue at Thorndon Quay?"* → calls get_overdue_items with project filter
-- *"Assign all plumbing items at Richmond Villas to ABC Plumbing"* → calls assign_contractor
+- *"Assign all plumbing items at Richmond Villas to ABC Plumbing"* → calls set_item_contractor
 - *"Create a work order for the painter at Avalon Studios and send it"* → calls create_work_order
 - *"Mark item MI-0042 as confirmed"* → calls update_item_status
 

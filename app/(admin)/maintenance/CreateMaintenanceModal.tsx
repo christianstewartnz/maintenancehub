@@ -254,9 +254,9 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                   </select>
                 </div>
                 <div style={{ flex: '1 1 200px', maxWidth: 260 }}>
-                  <label style={sectionLabel}>Assign to</label>
+                  <label style={sectionLabel}>Responsible</label>
                   <select className="input" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
-                    <option value="">Unassigned (everyone)</option>
+                    <option value="">No one (everyone)</option>
                     {users.map(u => (
                       <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>
                     ))}

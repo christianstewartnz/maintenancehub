@@ -66,10 +66,10 @@ export async function GET(request: Request) {
   if (assignee === ASSIGNEE_ME) {
     query = query.or(`assigned_to.is.null,assigned_to.eq.${user.id}`)
     const { data: me } = await supabase.from('profiles').select('full_name, email').eq('id', user.id).single()
-    assigneeLabel = `${profileName(me ?? { full_name: null, email: user.email ?? null })} + unassigned`
+    assigneeLabel = `${profileName(me ?? { full_name: null, email: user.email ?? null })} + no one responsible`
   } else if (assignee === ASSIGNEE_UNASSIGNED) {
     query = query.is('assigned_to', null)
-    assigneeLabel = 'Unassigned'
+    assigneeLabel = 'No one responsible'
   } else if (assignee) {
     const { data: who } = await supabase.from('profiles').select('full_name, email').eq('id', assignee).maybeSingle()
     if (!who) return Response.json({ error: 'Unknown assignee' }, { status: 400 })

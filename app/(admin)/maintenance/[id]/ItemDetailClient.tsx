@@ -438,14 +438,15 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
 
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <InfoCard title="Assigned to">
+        <InfoCard title="Responsible">
           <select
             className="input"
             value={item.assigned_to ?? ''}
             onChange={e => saveAssignee(e.target.value || null)}
             disabled={savingAssignee}
+            aria-label="Responsible"
           >
-            <option value="">Unassigned (everyone)</option>
+            <option value="">No one (everyone)</option>
             {users.map(u => <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>)}
           </select>
           {item.assigned_to !== currentUserId && (
@@ -455,7 +456,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
               onClick={() => saveAssignee(currentUserId)}
               disabled={savingAssignee || !currentUserId}
             >
-              Assign to me
+              Make me responsible
             </button>
           )}
         </InfoCard>
@@ -673,7 +674,7 @@ function formatActivityLog(log: ActivityLog): string {
     case 'contractor_notified': return d?.method === 'email'
       ? `emailed ${d?.contractor ?? 'the contractor'} about this item`
       : `marked ${d?.contractor ?? 'the contractor'} as told about this item`
-    case 'assignee_changed': return d?.to ? `assigned item to ${d?.to_name ?? 'a user'}` : 'unassigned item'
+    case 'assignee_changed': return d?.to ? `made ${d?.to_name ?? 'a user'} responsible` : 'cleared who is responsible'
     case 'item_created': return `created item "${d?.title}"`
     case 'comment_added': return 'added a comment'
     case 'photo_added': return d?.photo_type === 'before' ? 'added an inspection photo'
