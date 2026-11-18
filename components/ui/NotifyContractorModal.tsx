@@ -22,8 +22,27 @@ interface Props {
 
 /** Preview + confirm dialog for emailing a contractor about their new items. */
 export default function NotifyContractorModal({ contractor, items, onClose, onDone }: Props) {
-  const [busy, setBusy] = useState<'email' | 'mark' | null>(null)
+  const [busy, setBusy] = useState<'email' | 'mark' | 'test' | null>(null)
   const [error, setError] = useState('')
+  const [testSentTo, setTestSentTo] = useState('')
+
+  async function sendTest() {
+    setBusy('test')
+    setError('')
+    setTestSentTo('')
+    const res = await fetch(`/api/contractors/${contractor.id}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'test', item_ids: items.map(i => i.id) }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setBusy(null)
+    if (!res.ok) {
+      setError(json.error ?? 'Something went wrong.')
+      return
+    }
+    setTestSentTo(json.to ?? 'you')
+  }
 
   async function run(mode: 'email' | 'mark') {
     setBusy(mode)
@@ -74,6 +93,7 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
               </tbody>
             </table>
           </div>
+          {testSentTo && <p style={{ color: '#2b8a3e', fontSize: 14, margin: 0 }}>Test sent to <strong>{testSentTo}</strong>. Nothing has been marked as notified.</p>}
           {error && <p style={{ color: '#e03131', fontSize: 14, margin: 0 }}>{error}</p>}
         </div>
         <div className="modal-footer" style={{ alignItems: 'center' }}>
@@ -85,6 +105,14 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
             title="Clear these from the to-notify list without sending an email"
           >
             {busy === 'mark' ? 'Marking…' : 'Mark as told (no email)'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={sendTest}
+            disabled={!!busy}
+            title="Send this exact email to yourself instead of the contractor. Nothing is marked as notified."
+          >
+            {busy === 'test' ? 'Sending test…' : 'Send test to me'}
           </button>
           <button className="btn btn-secondary" onClick={onClose} disabled={!!busy}>Cancel</button>
           <button className="btn btn-primary" onClick={() => run('email')} disabled={!!busy || !contractor.email}>
