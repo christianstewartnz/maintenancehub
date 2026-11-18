@@ -101,10 +101,7 @@ export default function StepsPanel({ item, currentTradeName, currentContractorNa
       const c = tradeAssignments.find(a => a.trade_id === patch.trade_id)?.contractor_id
       if (c) update.contractor_id = c
     }
-    if ('contractor_id' in update) {
-      if (update.contractor_id && step.status === 'logged') update.status = 'assigned'
-      else if (!update.contractor_id && step.status === 'assigned') update.status = 'logged'
-    }
+    // Status follows the contractor + notify stamp in the DB (stays Logged until notified)
     await run(() => supabase.from('maintenance_items').update(update).eq('id', step.id), "Couldn't update step")
   }
 

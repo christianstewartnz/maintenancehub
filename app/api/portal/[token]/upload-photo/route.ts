@@ -70,6 +70,9 @@ export async function POST(
     performed_by: contractor.company_name,
   })
 
+  // Contractor is working on it: Logged/Assigned → In Progress
+  const { data: status } = await supabase.rpc('portal_mark_started', { p_token: token, p_item_id: item.id })
+
   const { data: signed } = await supabase.storage.from(ATTACHMENTS_BUCKET).createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
-  return Response.json({ data: { ...row, url: signed?.signedUrl ?? null } })
+  return Response.json({ data: { ...row, url: signed?.signedUrl ?? null }, status })
 }

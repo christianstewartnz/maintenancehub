@@ -78,7 +78,8 @@ function ItemRow({
                 New
               </span>
             )}
-            <StatusBadge status={item.status} />
+            {/* "Logged" is an internal stage (not notified yet) — to the contractor it's just Assigned */}
+            <StatusBadge status={item.status === 'logged' ? 'assigned' : item.status} />
             {item.parent && item.trade && (
               <span style={{ fontSize: 11, fontWeight: 600, color: '#6940a5', background: '#f4effa', borderRadius: 4, padding: '1px 6px' }}>
                 {item.trade.name}
@@ -167,13 +168,9 @@ function ItemRow({
             />
           </div>
 
-          {(item.status === 'assigned' || item.status === 'in_progress') && (
+          {(item.status === 'logged' || item.status === 'assigned' || item.status === 'in_progress') && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              {item.status === 'assigned' && (
-                <button className="btn btn-secondary" disabled={isStatusSubmitting} onClick={() => onUpdateStatus('in_progress')}>
-                  Mark as In Progress
-                </button>
-              )}
+              {/* No "In Progress" button: commenting, adding a photo or booking a date sets it */}
               <button className="btn btn-primary" disabled={isStatusSubmitting} onClick={() => onUpdateStatus('contractor_complete')}>
                 {isStatusSubmitting ? 'Updating…' : 'Mark Complete'}
               </button>
@@ -252,7 +249,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
 
   // Project → Unit → Items for Maintenance tab
   const grouped = useMemo(() => {
-    const filtered = filterStatus === 'all' ? items : items.filter(i => i.status === filterStatus)
+    // A contractor sees not-yet-notified (Logged) items under Assigned
+    const filtered = filterStatus === 'all' ? items
+      : items.filter(i => i.status === filterStatus || (filterStatus === 'assigned' && i.status === 'logged'))
     const projectMap = new Map<string, {
       project: { id: string; name: string }
       units: Map<string, { unit: any; items: any[] }>
@@ -328,10 +327,16 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
       const res = await fetch(`/api/portal/${token}/upload-photo`, { method: 'POST', body: form })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.data) return json.error ?? `Upload failed (${res.status})`
+      applyStatus(itemId, json.status)
       return json.data
     } catch {
       return 'Upload failed — check your connection and try again'
     }
+  }
+
+  /** Comments, photos and booked dates move a not-started item to In Progress server-side; mirror it. */
+  function applyStatus(itemId: string, status: unknown) {
+    if (typeof status === 'string') setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
   }
 
   async function updateStatus(itemId: string, status: MaintenanceStatus) {
@@ -353,12 +358,14 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
 
   async function setScheduledDate(itemId: string, date: string) {
     setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: true }))
-    await fetch(`/api/portal/${token}/set-scheduled-date`, {
+    const res = await fetch(`/api/portal/${token}/set-scheduled-date`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_id: itemId, scheduled_date: date || null }),
     })
+    const json = await res.json().catch(() => ({}))
     setItems(prev => prev.map(i => i.id === itemId ? { ...i, scheduled_date: date || null } : i))
+    applyStatus(itemId, json.status)
     setSubmitting(prev => ({ ...prev, [`date-${itemId}`]: false }))
   }
 
@@ -377,6 +384,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
         i.id === itemId ? { ...i, comments: [...(i.comments ?? []), json.data] } : i
       ))
       setComments(prev => ({ ...prev, [itemId]: '' }))
+      applyStatus(itemId, json.status)
     }
     setSubmitting(prev => ({ ...prev, [`comment-${itemId}`]: false }))
   }

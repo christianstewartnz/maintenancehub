@@ -848,7 +848,8 @@ server.tool(
       .from('maintenance_items')
       .insert({
         unit_id, title, description: description ?? null, trade_id: trade_id ?? null,
-        ...(contractorId ? { contractor_id: contractorId, status: 'assigned' } : {}),
+        // Stays Logged until the contractor is notified
+        ...(contractorId ? { contractor_id: contractorId } : {}),
       })
       .select('item_number, title, status, unit:units(unit_identifier, address), contractor:contractors(company_name)')
       .single()
@@ -886,7 +887,6 @@ server.tool(
       const contractorId = await defaultContractorForTrade(trade_id)
       if (contractorId) {
         updates.contractor_id = contractorId
-        if (item.status === 'logged') updates.status = 'assigned'
         const { data: c } = await supabase.from('contractors').select('company_name').eq('id', contractorId).single()
         contractorNote = ` Contractor set to ${c?.company_name ?? "the trade's contractor"}.`
       }
@@ -1093,14 +1093,18 @@ server.tool(
     const c = await resolveContractor(contractor)
     if (!c) return { content: [{ type: 'text', text: `Contractor "${contractor}" not found.` }] }
 
-    const { error } = await supabase
+    // Status is handled by the DB: a new contractor means Logged until they're notified
+    const { data: updated, error } = await supabase
       .from('maintenance_items')
-      .update({ contractor_id: c.id, status: 'assigned' })
+      .update({ contractor_id: c.id })
       .eq('id', item.id)
+      .select('status')
+      .single()
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     await logActivity(item.id, `Contractor assigned: ${c.company_name}`)
-    return { content: [{ type: 'text', text: `${item_number} assigned to ${c.company_name} (status → assigned).` }] }
+    const note = updated?.status === 'logged' ? ' Stays Logged until the contractor is notified.' : ''
+    return { content: [{ type: 'text', text: `${item_number} assigned to ${c.company_name} (status: ${updated?.status}).${note}` }] }
   },
 )
 

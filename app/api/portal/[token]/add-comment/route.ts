@@ -24,6 +24,10 @@ export async function POST(
   })
 
   if (error) return Response.json({ error: error.message }, { status: 400 })
+  if (data?.error) return Response.json({ data })
+
+  // Contractor is working on it: Logged/Assigned → In Progress
+  const { data: status } = await supabase.rpc('portal_mark_started', { p_token: token, p_item_id: item_id })
 
   // Send notification email if enabled
   if (isEmailConfigured()) {
@@ -34,7 +38,7 @@ export async function POST(
     }
   }
 
-  return Response.json({ data })
+  return Response.json({ data, status })
 }
 
 async function sendCommentNotification(

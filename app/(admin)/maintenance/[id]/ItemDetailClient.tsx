@@ -86,10 +86,10 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   async function handleAssignContractor() {
     if (!selectedContractor) return
     setAssigningContractor(true)
-    const newStatus: MaintenanceStatus = item.status === 'logged' ? 'assigned' : item.status
+    // Stays Logged until the contractor is notified (DB trigger)
     const { data } = await supabase
       .from('maintenance_items')
-      .update({ contractor_id: selectedContractor, status: newStatus })
+      .update({ contractor_id: selectedContractor })
       .eq('id', item.id)
       .select('*, contractor:contractors(id, company_name, contact_name, email, phone)')
       .single()
@@ -210,10 +210,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       const defaultContractorId = tradeChanged && editForm.trade_id
         ? tradeAssignments.find(a => a.trade_id === editForm.trade_id)?.contractor_id ?? null
         : null
-      if (defaultContractorId) {
-        update.contractor_id = defaultContractorId
-        if (item.status === 'logged') update.status = 'assigned'
-      }
+      if (defaultContractorId) update.contractor_id = defaultContractorId
     }
     const { data, error } = await supabase
       .from('maintenance_items')

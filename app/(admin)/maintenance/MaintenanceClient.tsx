@@ -10,6 +10,7 @@ import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/li
 import CreateMaintenanceModal from './CreateMaintenanceModal'
 import { LIST_SELECT, type MaintenanceItem, type MaintenanceStatus, type Profile } from '@/lib/types'
 import { useSessionState } from '@/lib/useSessionState'
+import { statusAfterContractorChange } from '@/lib/contractor-notify'
 import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
 
 const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
@@ -124,7 +125,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     let status = item.status
     if (defaultContractorId) {
       update.contractor_id = defaultContractorId
-      if (item.status === 'logged') update.status = status = 'assigned'
+      status = statusAfterContractorChange(item, defaultContractorId)
     }
     const { error } = await supabase.from('maintenance_items').update(update).eq('id', item.id)
     if (error) {
@@ -146,13 +147,9 @@ export default function MaintenanceClient({ items: initial, projects, contractor
 
   async function changeContractor(item: MaintenanceItem, contractorId: string | null) {
     markSaving(item.id, true)
-    // Same rule as the item page: giving a logged item a contractor moves it to Assigned.
-    // Clearing the contractor on an Assigned item puts it back to Logged.
-    const status: MaintenanceStatus =
-      contractorId && item.status === 'logged' ? 'assigned'
-      : !contractorId && item.status === 'assigned' ? 'logged'
-      : item.status
-    const { error } = await supabase.from('maintenance_items').update({ contractor_id: contractorId, status }).eq('id', item.id)
+    // The item stays Logged until the contractor is notified (DB trigger); mirror that locally
+    const status = statusAfterContractorChange(item, contractorId)
+    const { error } = await supabase.from('maintenance_items').update({ contractor_id: contractorId }).eq('id', item.id)
     if (error) {
       alert(`Couldn't update contractor: ${error.message}`)
     } else {

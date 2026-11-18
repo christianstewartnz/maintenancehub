@@ -34,5 +34,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true })
+  // Booking a date means the contractor is on it: Logged/Assigned → In Progress
+  const { data: status } = scheduled_date
+    ? await supabase.rpc('portal_mark_started', { p_token: token, p_item_id: item_id })
+    : { data: null }
+
+  return NextResponse.json({ ok: true, status })
 }
