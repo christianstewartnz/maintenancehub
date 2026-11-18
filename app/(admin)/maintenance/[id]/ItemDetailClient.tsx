@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime, STATUS_LABELS, nextStatus } from '@/lib/utils'
+import { formatDateTime, STATUS_LABELS, STATUS_FLOW } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile, ItemStep } from '@/lib/types'
@@ -53,8 +53,6 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
   const router = useRouter()
   const supabase = createClient()
 
-  const next = nextStatus(item.status)
-
   async function setStatus(to: MaintenanceStatus) {
     if (to === item.status) return
     if (isJob && to === 'complete' && !confirm(`Sign off ${item.item_number}? Every step on this job will be marked complete.`)) return
@@ -64,23 +62,20 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
     if (error) alert(`Couldn't update status: ${error.message}`)
     if (data) {
       // A job's status follows its steps, so take what the database settled on
-      setItem(prev => ({ ...prev, status: data.status ?? to, completed_at: data.completed_at ?? completed_at }))
+      // Also the DB's notified stamp: picking Assigned/Logged by hand sets/clears it
+      setItem(prev => ({ ...prev, status: data.status ?? to, completed_at: data.completed_at ?? completed_at, contractor_notified_at: data.contractor_notified_at ?? null }))
       if (isJob) setStepsKey(k => k + 1)
       setActivity(prev => [{
         id: Math.random().toString(),
         maintenance_item_id: item.id,
         action: 'status_changed',
-        details: { from: item.status, to },
+        details: { from: item.status, to: data.status ?? to },
         performed_by: 'admin',
         created_at: new Date().toISOString(),
       }, ...prev])
       router.refresh()
     }
     setUpdatingStatus(false)
-  }
-
-  function advanceStatus() {
-    if (next) setStatus(next)
   }
 
   async function handleAssignContractor() {
@@ -299,21 +294,34 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             <CheckCircle2 size={15} /> Completed{item.completed_at ? ` ${formatDateTime(item.completed_at)}` : ''}
             <span style={{ color: '#787774', fontSize: 13, marginLeft: 'auto' }}>Reopen a step to reopen the job.</span>
           </div>
-        ) : next ? (
-          <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, color: '#787774' }}>
-              Advance to <strong style={{ color: '#37352f' }}>{STATUS_LABELS[next]}</strong>
-            </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {next !== 'complete' && (
-                <button className="btn btn-secondary" onClick={advanceStatus} disabled={updatingStatus}>
-                  {`Mark as ${STATUS_LABELS[next]}`}
-                </button>
-              )}
+        ) : item.status !== 'complete' ? (
+          <div style={{ background: '#f7f7f5', border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px', marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#787774' }}>
+                Status
+                <select
+                  className="input"
+                  style={{ width: 'auto' }}
+                  value={item.status}
+                  disabled={updatingStatus}
+                  onChange={e => setStatus(e.target.value as MaintenanceStatus)}
+                >
+                  {STATUS_FLOW.filter(s => s !== 'complete').map(s => (
+                    <option key={s} value={s} disabled={s === 'assigned' && !item.contractor_id}>
+                      {STATUS_LABELS[s]}{s === 'assigned' && !item.contractor_id ? ' (needs a contractor)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button className="btn btn-primary" onClick={() => setStatus('complete')} disabled={updatingStatus}>
                 <CheckCircle2 size={15} /> {updatingStatus ? 'Updating…' : 'Mark Complete'}
               </button>
             </div>
+            {item.status === 'logged' && item.contractor_id && (
+              <p style={{ margin: '8px 0 0', fontSize: 13, color: '#787774' }}>
+                Not sent to {(item.contractor as any)?.company_name ?? 'the contractor'} yet. Notify them from the contractor page, or set the status to Assigned if they&apos;ve already been told.
+              </p>
+            )}
           </div>
         ) : (
           <div style={{ background: '#f2f9f4', border: '1px solid #d6ecdc', borderRadius: 8, padding: '14px 16px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
