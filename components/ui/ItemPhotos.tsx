@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Camera, Trash2, X, Paperclip } from 'lucide-react'
+import { Camera, ImagePlus, Trash2, X, Paperclip } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import { compressImage, uploadFileName, PHOTO_TYPE_LABELS, type PhotoWithUrl } from '@/lib/photos'
 import type { PhotoType } from '@/lib/types'
@@ -75,23 +75,30 @@ export default function ItemPhotos({ initialPhotos, uploadTypes, onUpload, onDel
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 12 }}>
         {sections.map(type => {
           const list = photos.filter(p => p.photo_type === type)
           const canUpload = uploadTypes.includes(type)
           const busy = uploading?.type === type
           return (
             <div key={type} style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '10px 12px', background: 'white' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: list.length || hints?.[type] ? 8 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: list.length || hints?.[type] ? 8 : 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#37352f' }}>
                   {PHOTO_TYPE_LABELS[type]}s <span style={{ color: '#a0a09e', fontWeight: 400 }}>({list.length})</span>
                 </span>
                 {canUpload && (
-                  <UploadButton
-                    disabled={!!uploading}
-                    label={busy ? `Uploading ${Math.min(uploading!.done + 1, uploading!.total)}/${uploading!.total}…` : 'Add photo'}
-                    onFiles={files => handleFiles(type, files)}
-                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' }}>
+                    {busy ? (
+                      <span style={{ fontSize: 12, color: '#787774', padding: '4px 0' }}>
+                        Uploading {Math.min(uploading!.done + 1, uploading!.total)}/{uploading!.total}…
+                      </span>
+                    ) : (
+                      <>
+                        <UploadButton camera disabled={!!uploading} label="Take photo" onFiles={files => handleFiles(type, files)} />
+                        <UploadButton disabled={!!uploading} label="Add photo" onFiles={files => handleFiles(type, files)} />
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
               {hints?.[type] && list.length === 0 && (
@@ -166,24 +173,29 @@ export default function ItemPhotos({ initialPhotos, uploadTypes, onUpload, onDel
   )
 }
 
-function UploadButton({ label, disabled, onFiles }: { label: string; disabled: boolean; onFiles: (f: FileList | null) => void }) {
+/**
+ * `camera` opens the phone's rear camera directly (capture="environment"). It is
+ * only shown on touch devices (`.touch-only`); the plain button opens the
+ * file/gallery picker everywhere.
+ */
+function UploadButton({ label, disabled, onFiles, camera }: { label: string; disabled: boolean; onFiles: (f: FileList | null) => void; camera?: boolean }) {
   const ref = useRef<HTMLInputElement>(null)
   return (
     <>
       <button
         type="button"
-        className="btn btn-secondary"
-        style={{ padding: '4px 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+        className={camera ? 'btn btn-primary touch-only' : 'btn btn-secondary'}
+        style={{ padding: '4px 10px', fontSize: 12, gap: 5 }}
         disabled={disabled}
         onClick={() => ref.current?.click()}
       >
-        <Camera size={13} /> {label}
+        {camera ? <Camera size={13} /> : <ImagePlus size={13} />} {label}
       </button>
       <input
         ref={ref}
         type="file"
         accept="image/*"
-        multiple
+        {...(camera ? { capture: 'environment' as const } : { multiple: true })}
         hidden
         onChange={e => { onFiles(e.target.files); e.target.value = '' }}
       />

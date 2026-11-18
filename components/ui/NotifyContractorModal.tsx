@@ -66,7 +66,7 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
                 {items.map(i => (
                   <tr key={i.id}>
                     <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{i.item_number}</td>
-                    <td style={{ fontWeight: 500 }}>{i.title}</td>
+                    <td className="wrap-mobile" style={{ fontWeight: 500 }}>{i.title}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{i.unit?.project?.name ?? '—'}</td>
                     <td style={{ fontSize: 13 }}>{formatUnitLabel(i.unit)}</td>
                   </tr>

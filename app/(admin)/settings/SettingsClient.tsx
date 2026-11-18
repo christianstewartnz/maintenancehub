@@ -247,7 +247,7 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
       <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '20px 24px', marginBottom: 24 }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600 }}>SLA Thresholds</h3>
         <p style={{ color: '#787774', fontSize: 14, marginTop: 0, marginBottom: 16 }}>Items approaching these thresholds are highlighted on the dashboard.</p>
-        <div style={{ display: 'flex', gap: 16 }}>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5 }}>Amber warning (days)</label>
             <input className="input" type="number" defaultValue={7} min={1} style={{ width: 100 }} />

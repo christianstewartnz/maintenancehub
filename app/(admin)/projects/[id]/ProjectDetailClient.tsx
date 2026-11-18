@@ -424,7 +424,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
               <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setShowUnitModal(false)}>✕</button>
             </div>
             <form onSubmit={handleSaveUnit}>
-              <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="modal-body stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <Field label="Construction Number"><input className="input" value={unitForm.unit_identifier} onChange={e => setUnitForm(f => ({ ...f, unit_identifier: e.target.value }))} placeholder="e.g. C001" /></Field>
                 <Field label="Lot Number"><input className="input" value={unitForm.lot_number} onChange={e => setUnitForm(f => ({ ...f, lot_number: e.target.value }))} placeholder="e.g. Lot 1" /></Field>
                 <Field label="Address" style={{ gridColumn: 'span 2' }}><input className="input" value={unitForm.address} onChange={e => setUnitForm(f => ({ ...f, address: e.target.value }))} placeholder="Full unit address" /></Field>
@@ -432,7 +432,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 {/* Owners section — only shown when editing an existing unit */}
                 {editingUnit && (
                   <div style={{ gridColumn: 'span 2', borderTop: '1px solid #e9e9e7', paddingTop: 14 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                       <label style={{ fontSize: 13, fontWeight: 500, color: '#37352f' }}>Owners</label>
                       {!showOwnerForm && (
                         <button type="button" className="btn btn-secondary" style={{ padding: '3px 10px', fontSize: 12 }} onClick={() => setShowOwnerForm(true)}>
@@ -457,7 +457,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       </div>
                     )}
                     {showOwnerForm && (
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#f7f7f5', borderRadius: 8, padding: 12 }}>
+                      <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#f7f7f5', borderRadius: 8, padding: 12 }}>
                         <Field label="Name *"><input className="input" autoFocus value={ownerForm.name} onChange={e => setOwnerForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" /></Field>
                         <Field label="Email"><input className="input" type="email" value={ownerForm.email} onChange={e => setOwnerForm(f => ({ ...f, email: e.target.value }))} /></Field>
                         <Field label="Phone"><input className="input" value={ownerForm.phone} onChange={e => setOwnerForm(f => ({ ...f, phone: e.target.value }))} /></Field>

@@ -107,9 +107,9 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
   const canSubmit = projectId && contractorId && selectedIds.size > 0
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 900 }}>
+    <div className="page-content" style={{ padding: '24px 32px', maxWidth: 900 }}>
       {/* Project + Contractor selectors */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+      <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
         <div>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#37352f', marginBottom: 6 }}>Project</label>
           <select className="input" value={projectId} onChange={e => setProjectId(e.target.value)}>
@@ -129,7 +129,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
       {/* Items */}
       {projectId && contractorId && (
         <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#37352f' }}>
               Available Items
               {availableItems.length > 0 && <span style={{ marginLeft: 8, color: '#787774', fontWeight: 400 }}>({availableItems.length})</span>}
@@ -170,7 +170,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
                           <input type="checkbox" checked={checked} onChange={() => toggleItem(item.id)} style={{ cursor: 'pointer' }} />
                         </td>
                         <td style={{ fontSize: 13, color: '#787774' }}>{item.item_number}</td>
-                        <td style={{ fontWeight: 500 }}>{item.title}</td>
+                        <td className="wrap-mobile" style={{ fontWeight: 500 }}>{item.title}</td>
                         <td style={{ fontSize: 13 }}>
                           {formatUnitLabel(unit)}
                         </td>

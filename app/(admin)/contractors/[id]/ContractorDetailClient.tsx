@@ -98,7 +98,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
   const completedItems = items.filter(i => i.status === 'complete')
 
   return (
-    <div style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 28, alignItems: 'start' }}>
+    <div className="page-content stack-mobile" style={{ padding: '24px 32px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: 28, alignItems: 'start' }}>
       <div>
         {/* Open items */}
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#37352f', marginBottom: 12 }}>
@@ -113,7 +113,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
               {openItems.map((item: any) => (
                 <tr key={item.id} className={getItemRowClass(item)}>
                   <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
-                  <td>
+                  <td className="wrap-mobile">
                     <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link>
                     {pendingIds.has(item.id) && (
                       <span title="Not yet emailed to this contractor" style={{ marginLeft: 8, background: '#e7f1fb', color: '#1f6fbf', borderRadius: 10, padding: '1px 7px', fontWeight: 600, fontSize: 11 }}>Not emailed</span>
@@ -138,7 +138,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
                 {completedItems.slice(0, 20).map((item: any) => (
                   <tr key={item.id}>
                     <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
-                    <td><Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link></td>
+                    <td className="wrap-mobile"><Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', fontWeight: 500, textDecoration: 'none' }}>{item.title}</Link></td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{item.unit?.project?.name ?? '—'}</td>
                     <td style={{ fontSize: 13 }}>{formatUnitLabel(item.unit)}</td>
                     <td style={{ fontSize: 13, color: '#787774' }}>{formatDate(item.created_at)}</td>
@@ -174,7 +174,7 @@ export default function ContractorDetailClient({ contractor: initial, assignment
 
         {/* Contact card — view or edit mode */}
         <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <h4 style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contact</h4>
             {!editMode && (
               <button className="btn btn-ghost" style={{ padding: '2px 6px', color: '#787774' }} onClick={openEdit} title="Edit contractor details">

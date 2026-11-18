@@ -306,7 +306,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                         </button>
                       )}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div style={{ gridColumn: 'span 2' }}>
                         <label style={labelStyle}>Title *</label>
                         <input className="input" value={line.title} onChange={e => updateLine(idx, 'title', e.target.value)} placeholder="e.g. Leaking kitchen tap" required={idx === 0} />
@@ -386,7 +386,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                             onChange={e => setAiResults(prev => prev.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
                           />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+                        <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
                           <div>
                             <label style={labelStyle}>Unit / Address *</label>
                             <select className="input" value={aiUnitIds[idx] ?? ''} onChange={e => setAiUnitIds(prev => prev.map((v, i) => i === idx ? e.target.value : v))}>

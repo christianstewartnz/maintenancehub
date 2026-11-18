@@ -206,7 +206,7 @@ export default function StepsPanel({ item, currentTradeName, currentContractorNa
               The current work{currentTradeName || currentContractorName ? ` (${[currentTradeName, currentContractorName].filter(Boolean).join(' — ')})` : ''} becomes <strong>{item.item_number}-1</strong>, keeping its contractor, status and date. This adds the next step.
             </p>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label style={labelStyle}>Trade</label>
               <select className="input" value={form.trade_id} onChange={e => pickTrade(e.target.value)} required>

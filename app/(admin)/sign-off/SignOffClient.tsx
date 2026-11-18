@@ -252,7 +252,7 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
       )}
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
           <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
@@ -339,7 +339,7 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
                             style={{ background: 'white', border: '1px solid #e9e9e7', borderRadius: 8, overflow: 'hidden' }}
                           >
                             {/* Main row */}
-                            <div style={{ padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                            <div className="flex-stack-mobile" style={{ padding: '14px 16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
                                   <span style={{ fontSize: 12, color: '#a0a09e' }}>{item.item_number}</span>
@@ -380,7 +380,7 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
                               </div>
 
                               {/* Actions */}
-                              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start' }}>
+                              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                 <button
                                   className="btn btn-ghost"
                                   style={{ color: '#787774', fontSize: 13 }}

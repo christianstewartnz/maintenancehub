@@ -188,9 +188,9 @@ export default function WorkOrderDetailClient({ workOrder: initial, items }: Pro
                       {item.item_number}
                     </Link>
                   </td>
-                  <td style={{ fontWeight: 500 }}>{item.title}</td>
+                  <td className="wrap-mobile" style={{ fontWeight: 500 }}>{item.title}</td>
                   <td style={{ fontSize: 13 }}>{unit?.unit_identifier ?? '—'}</td>
-                  <td style={{ fontSize: 13, color: '#787774', maxWidth: 180 }}>{unit?.address ?? '—'}</td>
+                  <td className="wrap-mobile" style={{ fontSize: 13, color: '#787774', maxWidth: 180 }}>{unit?.address ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>
                     {unit?.owners?.length > 0
                       ? unit.owners.map((o: any) => o.name).join(', ')

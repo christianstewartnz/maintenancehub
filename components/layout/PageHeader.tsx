@@ -38,7 +38,7 @@ export default function PageHeader({ title, description, actions, breadcrumbs, b
             <p style={{ color: '#787774', fontSize: 14, marginTop: 4, marginBottom: 0 }}>{description}</p>
           )}
         </div>
-        {actions && <div style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>{actions}</div>}
+        {actions && <div className="page-header-actions" style={{ display: 'flex', gap: 8, flexShrink: 0, marginLeft: 16 }}>{actions}</div>}
       </div>
     </div>
   )

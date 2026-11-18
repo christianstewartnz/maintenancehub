@@ -70,7 +70,7 @@ function ItemRow({
         onClick={onToggle}
         style={{ padding: '11px 14px', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}
       >
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 3 }}>
             <span style={{ fontSize: 11, color: '#a0a09e' }}>{item.item_number}</span>
             {isNewItem(item) && (
@@ -384,13 +384,13 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
   return (
     <div style={{ minHeight: '100vh', background: '#f7f7f5' }}>
       {/* Header */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '14px 24px' }}>
+      <div className="portal-pad" style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '14px 24px' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#37352f', display: 'flex', alignItems: 'center', gap: 8 }}><StratumLogo size={22} />{contractor.company_name}</h1>
         <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>Maintenance Portal</p>
       </div>
 
       {/* Tabs */}
-      <div style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '0 24px', display: 'flex' }}>
+      <div className="portal-pad portal-tabs" style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '0 24px', display: 'flex' }}>
         {([
           ['maintenance', 'Maintenance', Wrench],
           ['work_orders', 'Work Orders', FileText],
@@ -415,7 +415,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
       {activeTab === 'maintenance' && (
         <>
           {/* Filter bar */}
-          <div style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="portal-pad" style={{ background: 'white', borderBottom: '1px solid #e9e9e7', padding: '10px 24px', display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
             <select className="input" style={{ width: 'auto' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
               <option value="all">All Status</option>
               {(['assigned', 'in_progress', 'contractor_complete'] as MaintenanceStatus[]).map(s => (
@@ -425,7 +425,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
             <span style={{ fontSize: 13, color: '#787774' }}>{totalFiltered} item{totalFiltered !== 1 ? 's' : ''}</span>
           </div>
 
-          <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
+          <div className="portal-pad" style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
             {grouped.length === 0 ? (
               <div className="empty-state" style={{ background: 'white', borderRadius: 8 }}>
                 <p style={{ fontSize: 15, fontWeight: 500 }}>No items found</p>
@@ -472,7 +472,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                               onClick={() => toggleUnit(unit.id)}
                               style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start' }}
                             >
-                              <div style={{ flex: 1 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
                                 {/* Unit identifier */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   {summary.state === 'done' && <CheckCircle2 size={16} className="unit-count-done" style={{ flexShrink: 0 }} />}
@@ -507,7 +507,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                         {o.phone && (
                                           <>
                                             <Phone size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
-                                            <span>{o.phone}</span>
+                                            <a href={`tel:${o.phone.replace(/[^+\d]/g, '')}`} onClick={e => e.stopPropagation()} style={{ color: '#2f6fcf', textDecoration: 'none' }}>{o.phone}</a>
                                           </>
                                         )}
                                         {o.email && (
@@ -576,7 +576,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
 
       {/* ── WORK ORDERS TAB ── */}
       {activeTab === 'work_orders' && (
-        <div style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
+        <div className="portal-pad" style={{ padding: '20px 24px', maxWidth: 900, margin: '0 auto' }}>
           {workOrderGroups.length === 0 ? (
             <div className="empty-state" style={{ background: 'white', borderRadius: 8 }}>
               <p style={{ fontSize: 15, fontWeight: 500 }}>No work orders</p>
@@ -604,7 +604,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                         }}
                       >
                         <FileText size={16} style={{ color: '#a0a09e', flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: 14, color: '#37352f' }}>{wo.work_order_number}</div>
                           <div style={{ fontSize: 12, color: '#a0a09e', marginTop: 2 }}>
                             {count} item{count !== 1 ? 's' : ''}

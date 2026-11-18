@@ -119,7 +119,7 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
   }
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-content" style={{ padding: '24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginBottom: 20 }}>
         {pending.length > 0 && (
           <button

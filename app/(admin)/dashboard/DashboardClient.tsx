@@ -191,7 +191,7 @@ function DayPopup({ dateStr, items, onClose }: { dateStr: string; items: Mainten
         style={{ background: 'white', borderRadius: 12, padding: 20, maxWidth: 520, width: '90%', maxHeight: '70vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#37352f' }}>{label}</h3>
           <button className="btn btn-ghost" style={{ padding: '2px 8px', fontSize: 16 }} onClick={onClose}>✕</button>
         </div>
@@ -223,7 +223,7 @@ function WeekSlider({ items, onExpandMonth }: { items: MaintenanceItem[]; onExpa
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#37352f' }}>This Week</h2>
         <button
           className="btn btn-ghost"
@@ -234,7 +234,7 @@ function WeekSlider({ items, onExpandMonth }: { items: MaintenanceItem[]; onExpa
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+      <div className="week-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
         {days.map(day => {
           const dateStr = toLocalDateStr(day)
           const isToday = dateStr === todayStr
@@ -315,7 +315,7 @@ function MonthCalendar({ items, onClose }: { items: MaintenanceItem[]; onClose: 
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={() => setViewDate(new Date(year, month - 1, 1))}>
             <ChevronLeft size={16} />
@@ -457,7 +457,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Live indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div className={`live-dot ${isLive ? 'live-dot--active' : ''}`} />
           <span style={{ fontSize: 12, color: '#787774' }}>{isLive ? 'Live' : 'Connecting…'}</span>
@@ -479,7 +479,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
       }
 
       {/* Stats — small & secondary */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
         <MiniStat value={totalOpen} label="Open items" />
         <MiniStat value={totalOverdue} label="Overdue (14+ days)" color="#e03c3c" icon={<AlertTriangle size={13} />} />
         <MiniStat value={totalAwaitingConfirm} label="Awaiting confirmation" color="#9a6700" icon={<Clock size={13} />} />
@@ -558,7 +558,7 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
                                 return (
                                   <tr key={item.id} className={getItemRowClass(item, AMBER_DAYS, RED_DAYS)}>
                                     <td style={{ color: '#787774', fontSize: 13 }}>{item.item_number}</td>
-                                    <td>
+                                    <td className="wrap-mobile">
                                       <Link href={`/maintenance/${item.id}`} style={{ color: '#37352f', textDecoration: 'none', fontWeight: 500 }}>{item.title}</Link>
                                     </td>
                                     <td><StatusBadge status={item.status} /></td>

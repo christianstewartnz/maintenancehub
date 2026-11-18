@@ -30,7 +30,7 @@ export default async function SettingsPage() {
         title="Settings"
         description="Configure notifications, reports, and SLA thresholds"
       />
-      <div style={{ padding: '24px 32px' }}>
+      <div className="page-content" style={{ padding: '24px 32px' }}>
         <ProfileNameCard userId={user.id} email={user.email ?? null} fullName={profile?.full_name ?? null} />
         <SettingsClient
           prefs={prefs}

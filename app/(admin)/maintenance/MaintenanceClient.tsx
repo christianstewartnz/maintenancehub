@@ -373,7 +373,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       <tr key={`${step.id}-edit`} style={{ background: '#fbfbfa' }}>
         <td />
         <td colSpan={10} style={{ paddingTop: 4, paddingBottom: 12 }}>
-          <form
+          <form className="stack-mobile"
             onSubmit={e => { e.preventDefault(); saveStep(step, job) }}
             onKeyDown={e => { if (e.key === 'Escape') setEditingStep(null) }}
             style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(240px, 2fr) auto', gap: 8, alignItems: 'start', maxWidth: 1000 }}
@@ -452,7 +452,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           {nested && <span aria-hidden style={{ color: '#c7c6c3', marginRight: 4 }}>↳</span>}
           {item.item_number}
         </td>
-        <td style={{ maxWidth: 260 }}>
+        <td className="wrap-mobile" style={{ maxWidth: 260 }}>
           {nested ? (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
               <Link href={`/maintenance/${item.id}`} style={{ flex: 1, textDecoration: 'none', fontSize: 13 }}>
@@ -654,7 +654,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
       {/* Toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="toolbar-mobile" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 180 }}>
           <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#b0aea8' }} />
           <input className="input" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />

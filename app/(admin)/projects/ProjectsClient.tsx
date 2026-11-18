@@ -70,7 +70,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
   const archivedProjects = projects.filter(p => p.status === 'archived')
 
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div className="page-content" style={{ padding: '24px 32px' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={16} /> New Project
@@ -186,7 +186,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
 function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p: any, e: React.MouseEvent) => void; style?: React.CSSProperties }) {
   return (
     <div style={style}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+      <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
         {projects.map(p => (
           <Link key={p.id} href={`/projects/${p.id}`} style={{ textDecoration: 'none' }}>
             <div
