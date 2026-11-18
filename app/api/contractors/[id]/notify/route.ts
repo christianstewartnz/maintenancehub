@@ -47,6 +47,7 @@ export async function POST(
     .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
     .eq('contractor_id', id)
     .is('contractor_notified_at', null)
+    .eq('portal_hidden', false)
     .is('archived_at', null)
     .not('status', 'in', NOT_PENDING_FILTER)
     .order('created_at')

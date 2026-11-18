@@ -103,6 +103,8 @@ export interface MaintenanceItem {
   contractor_notified_at: string | null
   /** When the item was archived; null = active. Archived items are hidden from lists, counts and the portal. */
   archived_at: string | null
+  /** Hidden from the contractor portal (and its notify counts) until an admin shows it. */
+  portal_hidden: boolean
   /** Set on a step: the job (parent item) it belongs to. Step numbers look like MI-0166-2. */
   parent_item_id?: string | null
   /** A step's position within its job (reorderable; the item number stays fixed). */

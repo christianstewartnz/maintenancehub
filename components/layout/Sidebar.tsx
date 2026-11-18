@@ -54,6 +54,7 @@ export default function Sidebar() {
           .select('id', { count: 'exact', head: true })
           .not('contractor_id', 'is', null)
           .is('contractor_notified_at', null)
+          .eq('portal_hidden', false)
           .is('archived_at', null)
           .not('status', 'in', NOT_PENDING_FILTER),
       ])

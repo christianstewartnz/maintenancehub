@@ -15,13 +15,14 @@ export default async function ContractorDetailPage({ params }: { params: Promise
     supabase.from('contractors').select('*').eq('id', id).single(),
     supabase.from('project_trade_assignments').select('*, project:projects(id, name), trade:trades(id, name)').eq('contractor_id', id),
     supabase.from('maintenance_items').select(`
-      id, item_number, title, status, created_at, contractor_notified_at,
+      id, item_number, title, status, created_at, completed_at, contractor_notified_at, portal_hidden,
       unit:units(id, unit_identifier, address, project:projects(id, name))
-    `).eq('contractor_id', id).is('archived_at', null).order('created_at', { ascending: false }).limit(100),
+    `).eq('contractor_id', id).is('archived_at', null).order('created_at', { ascending: false }).limit(500),
     supabase.from('maintenance_items')
       .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', id)
       .is('contractor_notified_at', null)
+      .eq('portal_hidden', false)
       .is('archived_at', null)
       .not('status', 'in', NOT_PENDING_FILTER)
       .order('created_at'),

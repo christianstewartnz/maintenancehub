@@ -14,6 +14,7 @@ export default async function ContractorsPage() {
       .select('id, item_number, title, contractor_id, unit:units(unit_identifier, address, project:projects(name))')
       .not('contractor_id', 'is', null)
       .is('contractor_notified_at', null)
+      .eq('portal_hidden', false)
       .is('archived_at', null)
       .not('status', 'in', NOT_PENDING_FILTER)
       .order('created_at'),

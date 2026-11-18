@@ -555,7 +555,7 @@ server.tool(
 
     const { data: open } = await supabase
       .from('maintenance_items')
-      .select('item_number, title, status, unit:units(unit_identifier, address, project:projects(name))')
+      .select('item_number, title, status, portal_hidden, unit:units(unit_identifier, address, project:projects(name))')
       .eq('contractor_id', c.id)
       .is('archived_at', null)
       .not('status', 'in', '("complete","cancelled")')
@@ -580,7 +580,7 @@ server.tool(
       `Open items (${open?.length ?? 0}):`,
       ...(open ?? []).map(i => {
         const u = i.unit as any
-        return `  [${i.item_number}] ${i.title} | ${i.status} | ${(u?.project as any)?.name ?? '?'} | Unit ${unitLabel(u, '?')}`
+        return `  [${i.item_number}] ${i.title} | ${i.status} | ${(u?.project as any)?.name ?? '?'} | Unit ${unitLabel(u, '?')}${i.portal_hidden ? ' | HIDDEN from portal' : ''}`
       }),
       ``,
       `Recently completed (last 10):`,
@@ -677,7 +677,7 @@ server.tool(
 
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, created_at, unit:units(unit_identifier, address)')
+      .select('item_number, title, status, created_at, portal_hidden, unit:units(unit_identifier, address)')
       .in('unit_id', unitIds)
       .is('archived_at', null)
       .not('status', 'in', '("complete","cancelled")')
@@ -692,7 +692,7 @@ server.tool(
     const text = data.map(i => {
       const unit = unitLabel(i.unit as any, '?')
       const age = Math.floor((Date.now() - new Date(i.created_at).getTime()) / 86400000)
-      return `[${i.item_number}] ${i.title} | ${i.status} | Unit ${unit} | ${age}d old`
+      return `[${i.item_number}] ${i.title} | ${i.status} | Unit ${unit} | ${age}d old${i.portal_hidden ? ' | HIDDEN from portal' : ''}`
     }).join('\n')
 
     return { content: [{ type: 'text', text: `Open items for ${proj.name}:\n\n${text}` }] }
@@ -711,7 +711,7 @@ server.tool(
   async ({ status, project, limit = 20, archived = false }) => {
     let query = supabase
       .from('maintenance_items')
-      .select('item_number, title, status, created_at, unit:units(unit_identifier, address, project:projects(name))')
+      .select('item_number, title, status, created_at, portal_hidden, unit:units(unit_identifier, address, project:projects(name))')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -731,7 +731,7 @@ server.tool(
 
     const text = data.map(i => {
       const unit = i.unit as any
-      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} | Unit ${unitLabel(unit, '?')}`
+      return `[${i.item_number}] ${i.title} | ${i.status} | ${(unit?.project as any)?.name ?? '?'} | Unit ${unitLabel(unit, '?')}${i.portal_hidden ? ' | HIDDEN from portal' : ''}`
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No items found.' }] }
@@ -815,7 +815,7 @@ server.tool(
       u?.owners?.length ? `Owners: ${u.owners.map((o: any) => `${o.name}${o.phone ? ` (${o.phone})` : ''}${o.email ? ` <${o.email}>` : ''}`).join(', ')}` : 'Owner: —',
       `Trade: ${(item.trade as any)?.name ?? '—'}`,
       `Responsible (staff): ${item.assignee ? staffName(item.assignee as any) : 'No one'}`,
-      `Contractor: ${(item.contractor as any)?.company_name ?? '—'}`,
+      `Contractor: ${(item.contractor as any)?.company_name ?? '—'}${item.portal_hidden ? ' (HIDDEN from their portal — set_portal_visibility to show)' : ''}`,
       `Work Order: ${(item.work_order as any)?.work_order_number ?? '—'}`,
       `Scheduled date: ${item.scheduled_date ?? '—'}`,
       `Created: ${new Date(item.created_at).toLocaleDateString('en-NZ')}`,
@@ -842,42 +842,52 @@ server.tool(
     title: z.string().describe('Short title of the issue'),
     description: z.string().optional(),
     trade_id: z.string().optional().describe('Trade ID if known (from list_trades)'),
+    hidden_from_portal: z.boolean().optional().describe('true to keep the item out of the contractor portal (and Notify emails) until shown, e.g. a list logged before the inspection. Default: shown.'),
   },
-  async ({ unit_id, title, description, trade_id }) => {
+  async ({ unit_id, title, description, trade_id, hidden_from_portal }) => {
     // Auto-assign the project's contractor for the trade, if it has one
     const contractorId = trade_id ? await defaultContractorForTrade(trade_id) : null
     const { data, error } = await supabase
       .from('maintenance_items')
       .insert({
         unit_id, title, description: description ?? null, trade_id: trade_id ?? null,
+        portal_hidden: hidden_from_portal ?? false,
         // Stays Logged until the contractor is notified
         ...(contractorId ? { contractor_id: contractorId } : {}),
       })
-      .select('item_number, title, status, unit:units(unit_identifier, address), contractor:contractors(company_name)')
+      .select('item_number, title, status, portal_hidden, unit:units(unit_identifier, address), contractor:contractors(company_name)')
       .single()
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     const c = (data.contractor as any)?.company_name
-    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status})${c ? ` → ${c}` : ''} | Unit ${unitLabel(data.unit as any, '?')}` }] }
+    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status})${c ? ` → ${c}` : ''} | Unit ${unitLabel(data.unit as any, '?')}${data.portal_hidden ? ' | HIDDEN from portal' : ''}` }] }
   },
 )
 
 server.tool(
   'update_maintenance_item',
-  'Edit a maintenance item\'s title, description, or trade',
+  'Edit a maintenance item\'s title, description, trade, or contractor-portal visibility',
   {
     item_number: z.string().describe('Item number e.g. "MH-0042"'),
     title: z.string().optional(),
     description: z.string().optional(),
     trade_id: z.string().optional().describe('Trade ID (from list_trades), or empty string to clear'),
+    hidden_from_portal: z.boolean().optional().describe('true to hide from the contractor portal (and Notify emails), false to show again. A job split into steps applies it to its steps too.'),
   },
-  async ({ item_number, title, description, trade_id }) => {
+  async ({ item_number, title, description, trade_id, hidden_from_portal }) => {
     const item = await resolveItemByNumber(item_number)
     if (!item) return { content: [{ type: 'text', text: `Item ${item_number} not found.` }] }
 
     const updates: Record<string, unknown> = {}
     if (title !== undefined) updates.title = title
     if (description !== undefined) updates.description = description
+    if (hidden_from_portal !== undefined) {
+      updates.portal_hidden = hidden_from_portal
+      if (item.has_steps) {
+        const { error: stepErr } = await supabase.from('maintenance_items').update({ portal_hidden: hidden_from_portal }).eq('parent_item_id', item.id)
+        if (stepErr) return { content: [{ type: 'text', text: `Error: ${stepErr.message}` }] }
+      }
+    }
     if (trade_id !== undefined) {
       if (item.has_steps) return { content: [{ type: 'text', text: `${item_number} is split into steps — set the trade on a step (see get_maintenance_item).` }] }
       updates.trade_id = trade_id === '' ? null : trade_id
@@ -896,7 +906,81 @@ server.tool(
 
     const { error } = await supabase.from('maintenance_items').update(updates).eq('id', item.id)
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
-    return { content: [{ type: 'text', text: `${item_number} updated.${contractorNote}` }] }
+    const portalNote = hidden_from_portal === undefined ? '' : hidden_from_portal ? ' Hidden from the contractor portal.' : ' Shown in the contractor portal.'
+    return { content: [{ type: 'text', text: `${item_number} updated.${contractorNote}${portalNote}` }] }
+  },
+)
+
+server.tool(
+  'set_portal_visibility',
+  'Hide or show maintenance items in the contractor portal, in bulk. Items show by default; hide them to log a list before it is ready for contractors (e.g. before the inspection), then show them and notify. Hidden items are also left out of Notify emails and "new items" counts. Give item_numbers, or a project (optionally narrowed to one unit and/or contractor) to cover all its open items. A job split into steps applies to its steps too.',
+  {
+    hidden: z.boolean().describe('true to hide from the portal, false to show'),
+    item_numbers: z.array(z.string()).optional().describe('Specific items, e.g. ["MI-0081","MI-0082"]'),
+    project: z.string().optional().describe('Project name (partial) or ID — every open item in it'),
+    unit_id: z.string().optional().describe('Limit a project run to one unit (from list_units)'),
+    contractor: z.string().optional().describe('Limit a project run to one contractor (name, partial, or ID)'),
+  },
+  async ({ hidden, item_numbers, project, unit_id, contractor }) => {
+    if (!item_numbers?.length && !project) {
+      return { content: [{ type: 'text', text: 'Give item_numbers or a project.' }] }
+    }
+
+    let ids: string[] = []
+    const notFound: string[] = []
+
+    if (item_numbers?.length) {
+      const wanted = item_numbers.map(n => n.trim().toUpperCase())
+      const { data, error } = await supabase.from('maintenance_items').select('id, item_number').in('item_number', wanted)
+      if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+      const found = new Set((data ?? []).map(i => i.item_number))
+      notFound.push(...wanted.filter(n => !found.has(n)))
+      ids.push(...(data ?? []).map(i => i.id))
+    }
+
+    if (project) {
+      const proj = await resolveProjectAny(project)
+      if (!proj) return { content: [{ type: 'text', text: `Project "${project}" not found.` }] }
+      const unitIds = unit_id ? [unit_id] : await unitIdsForProject(proj.id)
+      if (!unitIds.length) return { content: [{ type: 'text', text: `${proj.name} has no units.` }] }
+      let q = supabase.from('maintenance_items').select('id').in('unit_id', unitIds)
+        .is('archived_at', null).not('status', 'in', '("complete","cancelled")')
+      if (contractor) {
+        const c = await resolveContractor(contractor)
+        if (!c) return { content: [{ type: 'text', text: `Contractor "${contractor}" not found.` }] }
+        q = q.eq('contractor_id', c.id)
+      }
+      const { data, error } = await q
+      if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+      ids.push(...(data ?? []).map(i => i.id))
+    }
+
+    // Steps of any job in the list follow the job
+    if (ids.length) {
+      const { data: steps } = await supabase.from('maintenance_items').select('id').in('parent_item_id', ids).is('archived_at', null)
+      ids.push(...(steps ?? []).map(s => s.id))
+    }
+    ids = [...new Set(ids)]
+    if (!ids.length) return { content: [{ type: 'text', text: `No matching items.${notFound.length ? ` Not found: ${notFound.join(', ')}` : ''}` }] }
+
+    const { data: changed, error } = await supabase
+      .from('maintenance_items')
+      .update({ portal_hidden: hidden })
+      .in('id', ids)
+      .neq('portal_hidden', hidden)
+      .select('id, item_number')
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+    for (const i of changed ?? []) await logActivity(i.id, hidden ? 'portal_hidden' : 'portal_shown')
+
+    const n = changed?.length ?? 0
+    const already = ids.length - n
+    const lines = [
+      `${hidden ? 'Hid' : 'Showed'} ${n} item${n !== 1 ? 's' : ''} ${hidden ? 'from' : 'in'} the contractor portal${n ? `: ${(changed ?? []).map(i => i.item_number).sort().join(', ')}` : ''}.`,
+      ...(already ? [`${already} already ${hidden ? 'hidden' : 'shown'}.`] : []),
+      ...(notFound.length ? [`Not found: ${notFound.join(', ')}`] : []),
+      ...(!hidden && n ? ['Contractors are not emailed automatically — use Notify on their contractor page when ready.'] : []),
+    ]
+    return { content: [{ type: 'text', text: lines.join('\n') }] }
   },
 )
 
