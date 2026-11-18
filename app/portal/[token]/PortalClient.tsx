@@ -90,7 +90,7 @@ function ItemRow({
                 Waiting
               </span>
             )}
-            {item.work_order && (
+            {item.work_order && item.work_order.status !== 'draft' && (
               <span style={{
                 fontSize: 11, fontWeight: 600, color: '#2f6fcf',
                 background: '#eef4ff', borderRadius: 4, padding: '1px 6px',
@@ -288,7 +288,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
     for (const item of items) {
       const p = item.unit?.project
       const wo = item.work_order
-      if (!p || !wo) continue
+      // Drafts haven't been sent yet, so the contractor shouldn't see them
+      if (!p || !wo || wo.status === 'draft') continue
       if (!projectMap.has(p.id)) projectMap.set(p.id, { project: p, wos: new Map() })
       const proj = projectMap.get(p.id)!
       if (!proj.wos.has(wo.id)) proj.wos.set(wo.id, { wo, count: 0, units: new Set() })
