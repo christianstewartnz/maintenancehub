@@ -15,7 +15,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
     supabase.from('maintenance_items').select(`
       id, item_number, title, description, status, created_at, updated_at, completed_at,
       contractor_id, trade_id, unit_id, assigned_to, scheduled_date, archived_at, parent_item_id, step_order, has_steps,
-      unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, settlement_date, owners:unit_owners(id, name, email, phone), project:projects(id, name)),
+      unit:units(id, unit_identifier, lot_number, address, access_contact_name, access_contact_phone, settlement_date, maintenance_reminder_sent_at, owners:unit_owners(id, name, email, phone), project:projects(id, name)),
       trade:trades(id, name),
       contractor:contractors(id, company_name, contact_name, email, phone),
       work_order:work_orders(id, work_order_number)

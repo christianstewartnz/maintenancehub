@@ -23,7 +23,7 @@ type Tab = 'units' | 'trades' | 'work-orders'
 const emptyUnitForm = {
   unit_identifier: '', lot_number: '', address: '',
   access_contact_name: '', access_contact_email: '', access_contact_phone: '',
-  settlement_date: '', notes: '',
+  settlement_date: '', maintenance_reminder_sent_at: '', notes: '',
 }
 const emptyOwnerForm = { name: '', email: '', phone: '' }
 
@@ -71,6 +71,10 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     router.refresh()
   }
 
+  function formatNzShort(date: string): string {
+    return new Date(date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
+  }
+
   function maintenanceDueDate(settlementDate: string | null): string {
     if (!settlementDate) return '—'
     const d = new Date(settlementDate)
@@ -78,8 +82,9 @@ export default function ProjectDetailClient({ project: initialProject, units: in
     return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 
-  function dueDateStatus(settlementDate: string | null): string {
+  function dueDateStatus(settlementDate: string | null, reminderSentAt?: string | null): string {
     if (!settlementDate) return ''
+    if (reminderSentAt) return '#0f7b6c'
     const due = new Date(settlementDate)
     due.setDate(due.getDate() + 90)
     const days = Math.ceil((due.getTime() - Date.now()) / 86400000)
@@ -107,6 +112,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
       access_contact_email: unit.access_contact_email ?? '',
       access_contact_phone: unit.access_contact_phone ?? '',
       settlement_date: unit.settlement_date ?? '',
+      maintenance_reminder_sent_at: unit.maintenance_reminder_sent_at?.slice(0, 10) ?? '',
       notes: unit.notes ?? '',
     })
     setModalOwners(unit.owners ?? [])
@@ -182,7 +188,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   async function handleSaveUnit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const payload = { ...unitForm, unit_identifier: unitForm.unit_identifier || null, settlement_date: unitForm.settlement_date || null }
+    const payload = { ...unitForm, unit_identifier: unitForm.unit_identifier || null, settlement_date: unitForm.settlement_date || null, maintenance_reminder_sent_at: unitForm.maintenance_reminder_sent_at || null }
 
     if (editingUnit) {
       const { data, error } = await supabase.from('units').update(payload).eq('id', editingUnit.id).select().single()
@@ -354,7 +360,15 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.email).filter(Boolean).join(', ') : ''}</td>
                       <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
                       <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
-                      <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
+                      <td
+                        style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date, u.maintenance_reminder_sent_at) }}
+                        title={u.maintenance_reminder_sent_at ? `Owner reminded ${formatNzShort(u.maintenance_reminder_sent_at)}` : undefined}
+                      >
+                        {maintenanceDueDate(u.settlement_date)}
+                        {u.settlement_date && u.maintenance_reminder_sent_at && (
+                          <div style={{ fontSize: 11, fontWeight: 400 }}>✓ Reminded {formatNzShort(u.maintenance_reminder_sent_at)}</div>
+                        )}
+                      </td>
                       <td className="sticky-actions">
                         <div style={{ display: 'flex', gap: 2 }}>
                         <button
@@ -536,6 +550,14 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                         Maint. due: <strong style={{ color: '#37352f' }}>{maintenanceDueDate(unitForm.settlement_date)}</strong>
                       </span>
                     )}
+                  </div>
+                </Field>
+                <Field label="90-Day Reminder Sent" style={{ gridColumn: 'span 2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <input className="input" type="date" value={unitForm.maintenance_reminder_sent_at} onChange={e => setUnitForm(f => ({ ...f, maintenance_reminder_sent_at: e.target.value }))} style={{ flex: 1 }} />
+                    <span style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>
+                      {unitForm.maintenance_reminder_sent_at ? 'Shows green on the units list' : 'Leave blank until the owner is reminded'}
+                    </span>
                   </div>
                 </Field>
                 <Field label="Notes" style={{ gridColumn: 'span 2' }}><textarea className="input" value={unitForm.notes} onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} /></Field>

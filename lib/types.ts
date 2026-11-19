@@ -34,6 +34,8 @@ export interface Unit {
   access_contact_email: string | null
   access_contact_phone: string | null
   settlement_date: string | null
+  /** When the owners were emailed their 90-day maintenance reminder (null = not yet). */
+  maintenance_reminder_sent_at: string | null
   notes: string | null
   created_at: string
   updated_at: string

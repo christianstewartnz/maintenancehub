@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   // Fetch all units with a settlement date, joined to project name
   const { data: units, error } = await serviceSupabase
     .from('units')
-    .select('id, unit_identifier, address, settlement_date, project:projects(name)')
+    .select('id, unit_identifier, address, settlement_date, maintenance_reminder_sent_at, project:projects(name)')
     .not('settlement_date', 'is', null)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
@@ -42,6 +42,8 @@ export async function POST(req: Request) {
   const overdueUnits: OverdueRow[] = []
 
   for (const u of units) {
+    // Owners already reminded — nothing more for us to do on this unit.
+    if (u.maintenance_reminder_sent_at) continue
     const settlement = u.settlement_date as string
     const due = new Date(settlement)
     due.setDate(due.getDate() + 90)

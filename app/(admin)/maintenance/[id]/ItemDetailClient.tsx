@@ -471,11 +471,13 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
             due.setDate(due.getDate() + 90)
             const daysUntil = Math.ceil((due.getTime() - Date.now()) / 86400000)
             const dueStr = due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
-            const color = daysUntil < 0 ? '#eb5757' : daysUntil <= 14 ? '#d09c3a' : undefined
+            const reminded = unit.maintenance_reminder_sent_at as string | null
+            const remindedStr = reminded ? new Date(reminded).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''
+            const color = reminded ? '#0f7b6c' : daysUntil < 0 ? '#eb5757' : daysUntil <= 14 ? '#d09c3a' : undefined
             return <>
               <div style={{ borderTop: '1px solid #f1f1ef', margin: '8px 0' }} />
               <Row label="Settlement" value={new Date(unit.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })} />
-              <Row label="Maint. Due" value={`${dueStr}${daysUntil < 0 ? ` (${Math.abs(daysUntil)}d overdue)` : daysUntil <= 14 ? ` (${daysUntil}d)` : ''}`} valueColor={color} />
+              <Row label="Maint. Due" value={reminded ? `${dueStr} (reminded ${remindedStr})` : `${dueStr}${daysUntil < 0 ? ` (${Math.abs(daysUntil)}d overdue)` : daysUntil <= 14 ? ` (${daysUntil}d)` : ''}`} valueColor={color} />
             </>
           })()}
         </InfoCard>

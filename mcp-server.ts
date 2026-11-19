@@ -245,7 +245,7 @@ server.tool(
 
     const { data, error } = await supabase
       .from('units')
-      .select('id, unit_identifier, lot_number, address, settlement_date, owners:unit_owners(id, name, email, phone)')
+      .select('id, unit_identifier, lot_number, address, settlement_date, maintenance_reminder_sent_at, owners:unit_owners(id, name, email, phone)')
       .eq('project_id', proj.id)
       .order('lot_number', { ascending: true })
 
@@ -257,7 +257,7 @@ server.tool(
       : data
     const text = rows.map((u: any) => {
       const ownerNames = u.owners?.map((o: any) => o.name).join(', ')
-      return `[${u.id}] Unit: ${unitLabel(u)}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${ownerNames ? ` | ${ownerNames}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}`
+      return `[${u.id}] Unit: ${unitLabel(u)}${u.lot_number ? ` | Lot ${u.lot_number}` : ''}${ownerNames ? ` | ${ownerNames}` : ''}${u.settlement_date ? ` | settled ${u.settlement_date}` : ''}${u.maintenance_reminder_sent_at ? ` | 90-day reminder sent ${String(u.maintenance_reminder_sent_at).slice(0, 10)}` : ''}`
     }).join('\n')
     const empty = q ? `No units matching "${search}".` : 'No units.'
     return { content: [{ type: 'text', text: `Units for ${proj.name}:\n\n${text || empty}` }] }
@@ -337,6 +337,7 @@ server.tool(
     access_contact_email: z.string().optional(),
     access_contact_phone: z.string().optional(),
     settlement_date: z.string().optional().describe('ISO date string e.g. 2025-06-01, or empty string to clear'),
+    maintenance_reminder_sent_at: z.string().optional().describe('Date the owners were sent their 90-day maintenance reminder (ISO e.g. 2026-11-16), or empty string to clear'),
     notes: z.string().optional(),
   },
   async ({ unit_id, ...fields }) => {
@@ -368,6 +369,65 @@ server.tool(
     const { error } = await supabase.from('units').delete().eq('id', unit_id)
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     return { content: [{ type: 'text', text: `Unit deleted.` }] }
+  },
+)
+
+server.tool(
+  'mark_maintenance_reminder_sent',
+  'Record that the owners of one or more units were emailed their 90-day maintenance form reminder. Pass the recipient email addresses from the reminder email; every unit with an owner whose email matches is marked (so the unit\'s Maint. Due date shows green / "Reminded" in the app). Units already marked keep their earliest reminder date unless overwrite is true.',
+  {
+    owner_emails: z.array(z.string()).min(1).describe('Recipient email addresses (To/CC/BCC) of the reminder email'),
+    sent_at: z.string().describe('Date the reminder was sent, ISO e.g. 2026-11-16'),
+    project: z.string().optional().describe('Optional project name (partial) to restrict matching, e.g. "Karori"'),
+    overwrite: z.boolean().optional().describe('Replace an existing reminder date (default false)'),
+    dry_run: z.boolean().optional().describe('Report matches without changing anything'),
+  },
+  async ({ owner_emails, sent_at, project, overwrite, dry_run }) => {
+    const emails = [...new Set(owner_emails.map(e => e.trim().toLowerCase()).filter(Boolean))]
+    let projectId: string | null = null
+    if (project) {
+      const proj = await resolveProjectAny(project)
+      if (!proj) return { content: [{ type: 'text', text: `Project "${project}" not found.` }] }
+      projectId = proj.id
+    }
+
+    const { data: owners, error } = await supabase
+      .from('unit_owners')
+      .select('email, unit:units(id, project_id, unit_identifier, address, settlement_date, maintenance_reminder_sent_at, project:projects(name))')
+      .not('email', 'is', null)
+    if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
+
+    const matched = new Map<string, any>()
+    const matchedEmails = new Set<string>()
+    for (const o of owners ?? []) {
+      const ownerEmails = String(o.email).toLowerCase().split(/[;,\s]+/).filter(Boolean)
+      const hit = ownerEmails.find(e => emails.includes(e))
+      const unit = o.unit as any
+      if (!hit || !unit) continue
+      if (projectId && unit.project_id !== projectId) continue
+      matchedEmails.add(hit)
+      matched.set(unit.id, unit)
+    }
+
+    const lines: string[] = []
+    let updated = 0
+    for (const unit of matched.values()) {
+      const label = `${unit.project?.name ?? '?'} — ${unitLabel(unit)}`
+      if (unit.maintenance_reminder_sent_at && !overwrite) {
+        lines.push(`• ${label}: already marked reminded ${String(unit.maintenance_reminder_sent_at).slice(0, 10)} (unchanged)`)
+        continue
+      }
+      if (!dry_run) {
+        const { error: upErr } = await supabase.from('units').update({ maintenance_reminder_sent_at: sent_at }).eq('id', unit.id)
+        if (upErr) { lines.push(`• ${label}: ERROR ${upErr.message}`); continue }
+      }
+      updated++
+      lines.push(`• ${label}: ${dry_run ? 'would mark' : 'marked'} reminded ${sent_at}`)
+    }
+    const unmatched = emails.filter(e => !matchedEmails.has(e))
+    const summary = `${dry_run ? 'Dry run — ' : ''}${updated} unit(s) ${dry_run ? 'would be ' : ''}marked, ${matched.size - updated} already marked.`
+    const tail = unmatched.length ? `\n\nNo unit owner found for: ${unmatched.join(', ')}` : ''
+    return { content: [{ type: 'text', text: `${summary}\n${lines.join('\n')}${tail}` }] }
   },
 )
 
