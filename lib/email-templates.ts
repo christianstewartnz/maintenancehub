@@ -39,7 +39,7 @@ export function maintenanceDueEmail(opts: {
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
 
         ${overdueUnits.length > 0 ? `
-        <h3 style="margin: 0 0 12px; font-size: 15px; color: #eb5757;">Overdue (${overdueUnits.length})</h3>
+        <h3 style="margin: 0 0 12px; font-size: 15px; color: #eb5757;">Overdue — Last 7 Days (${overdueUnits.length})</h3>
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
           <thead>
             <tr>

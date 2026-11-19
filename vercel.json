@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/maintenance-due/send",
-      "schedule": "0 19 * * *"
+      "schedule": "0 19 * * 0"
     }
   ]
 }

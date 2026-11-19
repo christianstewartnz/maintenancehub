@@ -4,8 +4,9 @@ import { maintenanceDueEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
 import { getRecipients } from '@/lib/notify-recipients'
 
-// Called daily by Vercel cron: POST /api/maintenance-due/send
-// Sends an alert email when units have their 90-day maintenance form due within 14 days or overdue.
+// Called weekly by Vercel cron (Sunday 19:00 UTC = Monday morning NZ): POST /api/maintenance-due/send
+// Sends an alert email when units have their 90-day maintenance form due within 14 days,
+// or overdue by no more than 7 days — older overdue units drop off the email.
 export async function POST(req: Request) {
   const auth = req.headers.get('authorization')
   if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
 
   const now = Date.now()
   const fourteenDays = 14 * 24 * 60 * 60 * 1000
+  const maxDaysOverdue = 7
 
   type UnitRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }
   type OverdueRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }
@@ -52,6 +54,7 @@ export async function POST(req: Request) {
     const settlementStr = new Date(settlement).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 
     if (daysUntilDue < 0) {
+      if (-daysUntilDue > maxDaysOverdue) continue
       overdueUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysOverdue: Math.abs(daysUntilDue) })
     } else if (msUntilDue <= fourteenDays) {
       upcomingUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysUntilDue })
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
   }
 
   if (upcomingUnits.length === 0 && overdueUnits.length === 0) {
-    return Response.json({ sent: false, reason: 'nothing due within 14 days' })
+    return Response.json({ sent: false, reason: 'nothing due within 14 days or overdue within the last 7 days' })
   }
 
   // Sort upcoming by days ascending, overdue by days overdue descending

@@ -167,7 +167,7 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           <div>
             <span style={{ fontSize: 14, fontWeight: 500 }}>90-day maintenance due</span>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>
-              Email me daily when units have their 90-day maintenance form due within 14 days or overdue.
+              Email me weekly (Monday morning) when units have their 90-day maintenance form due within 14 days or up to 7 days overdue.
             </p>
           </div>
         </label>
