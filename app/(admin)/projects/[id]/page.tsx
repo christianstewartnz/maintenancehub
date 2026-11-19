@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import ProjectDetailClient from './ProjectDetailClient'
+import ProjectDocuments from './ProjectDocuments'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         assignments={assignmentsRes.data ?? []}
         workOrders={workOrdersRes.data ?? []}
       />
+      <ProjectDocuments projectId={id} />
     </div>
   )
 }

@@ -5,8 +5,9 @@ import { formatUnitLabel } from '@/lib/utils'
 import { getRecipients } from '@/lib/notify-recipients'
 
 // Called weekly by Vercel cron (Sunday 19:00 UTC = Monday morning NZ): POST /api/maintenance-due/send
-// Sends an alert email when units have their 90-day maintenance form due within 14 days,
+// Sends an alert email when units have their 90-day maintenance form due within 28 days,
 // or overdue by no more than 7 days — older overdue units drop off the email.
+// Each unit has a "Draft email" link that downloads the owner reminder as an Outlook .eml.
 export async function POST(req: Request) {
   const auth = req.headers.get('authorization')
   if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -25,18 +26,18 @@ export async function POST(req: Request) {
   // Fetch all units with a settlement date, joined to project name
   const { data: units, error } = await serviceSupabase
     .from('units')
-    .select('id, unit_identifier, address, settlement_date, maintenance_reminder_sent_at, project:projects(name)')
+    .select('id, unit_identifier, address, settlement_date, maintenance_reminder_sent_at, project:projects(name), owners:unit_owners(email)')
     .not('settlement_date', 'is', null)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   if (!units?.length) return Response.json({ sent: false, reason: 'no units with settlement dates' })
 
   const now = Date.now()
-  const fourteenDays = 14 * 24 * 60 * 60 * 1000
+  const upcomingWindow = 28 * 24 * 60 * 60 * 1000
   const maxDaysOverdue = 7
 
-  type UnitRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }
-  type OverdueRow = { unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }
+  type UnitRow = { unitId: string; hasOwnerEmail: boolean; unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }
+  type OverdueRow = { unitId: string; hasOwnerEmail: boolean; unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysOverdue: number }
 
   const upcomingUnits: UnitRow[] = []
   const overdueUnits: OverdueRow[] = []
@@ -53,18 +54,20 @@ export async function POST(req: Request) {
     const unitLabel = formatUnitLabel(u)
     const projectName = project?.name ?? '—'
     const dueDateStr = due.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+    const unitId = u.id as string
+    const hasOwnerEmail = ((u.owners ?? []) as { email: string | null }[]).some(o => o.email?.includes('@'))
     const settlementStr = new Date(settlement).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
 
     if (daysUntilDue < 0) {
       if (-daysUntilDue > maxDaysOverdue) continue
-      overdueUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysOverdue: Math.abs(daysUntilDue) })
-    } else if (msUntilDue <= fourteenDays) {
-      upcomingUnits.push({ unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysUntilDue })
+      overdueUnits.push({ unitId, hasOwnerEmail, unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysOverdue: Math.abs(daysUntilDue) })
+    } else if (msUntilDue <= upcomingWindow) {
+      upcomingUnits.push({ unitId, hasOwnerEmail, unitLabel, projectName, settlementDate: settlementStr, dueDate: dueDateStr, daysUntilDue })
     }
   }
 
   if (upcomingUnits.length === 0 && overdueUnits.length === 0) {
-    return Response.json({ sent: false, reason: 'nothing due within 14 days or overdue within the last 7 days' })
+    return Response.json({ sent: false, reason: 'nothing due within 28 days or overdue within the last 7 days' })
   }
 
   // Sort upcoming by days ascending, overdue by days overdue descending
