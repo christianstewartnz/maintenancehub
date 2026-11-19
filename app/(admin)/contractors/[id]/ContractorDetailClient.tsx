@@ -2,24 +2,25 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, X, Mail, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
+import { Copy, Check, ExternalLink, Archive, ArchiveRestore, Pencil, Plus, X, Mail, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatUnitLabel, getItemRowClass } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { Contractor } from '@/lib/types'
+import type { Contractor, ContractorContact } from '@/lib/types'
 import { COUNTS_CHANGED_EVENT, NOT_PENDING_STATUSES } from '@/lib/contractor-notify'
 import NotifyContractorModal, { type PendingNotifyItem } from '@/components/ui/NotifyContractorModal'
 
 interface Props {
   contractor: Contractor
+  contacts: ContractorContact[]
   assignments: any[]
   items: any[]
   pendingItems: PendingNotifyItem[]
   lastNotifiedAt: string | null
 }
 
-export default function ContractorDetailClient({ contractor: initial, assignments, items: initialItems, pendingItems: initialPending, lastNotifiedAt: initialLast }: Props) {
+export default function ContractorDetailClient({ contractor: initial, contacts, assignments, items: initialItems, pendingItems: initialPending, lastNotifiedAt: initialLast }: Props) {
   const [contractor, setContractor] = useState(initial)
   const [pending, setPending] = useState(initialPending)
   const [lastNotifiedAt, setLastNotifiedAt] = useState(initialLast)
@@ -363,6 +364,8 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           )}
         </div>
 
+        <OtherContacts contractorId={contractor.id} initial={contacts} />
+
         <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
           <h4 style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Contractor Portal</h4>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -419,6 +422,101 @@ export default function ContractorDetailClient({ contractor: initial, assignment
           }}
         />
       )}
+    </div>
+  )
+}
+
+const emptyContact = { name: '', role: '', email: '', phone: '' }
+
+/** Additional people at the contractor: add, edit inline, remove. */
+function OtherContacts({ contractorId, initial }: { contractorId: string; initial: ContractorContact[] }) {
+  const supabase = createClient()
+  const [contacts, setContacts] = useState(initial)
+  // null = no form open; 'new' = adding; otherwise the id being edited
+  const [editing, setEditing] = useState<string | null>(null)
+  const [form, setForm] = useState(emptyContact)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function open(c?: ContractorContact) {
+    setEditing(c ? c.id : 'new')
+    setForm(c ? { name: c.name, role: c.role ?? '', email: c.email ?? '', phone: c.phone ?? '' } : emptyContact)
+    setError('')
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name.trim()) return
+    setSaving(true)
+    setError('')
+    const payload = { name: form.name.trim(), role: form.role.trim() || null, email: form.email.trim() || null, phone: form.phone.trim() || null }
+    const { data, error } = editing === 'new'
+      ? await supabase.from('contractor_contacts').insert({ contractor_id: contractorId, ...payload }).select().single()
+      : await supabase.from('contractor_contacts').update(payload).eq('id', editing!).select().single()
+    setSaving(false)
+    if (error || !data) { setError(error?.message ?? 'Could not save contact.'); return }
+    setContacts(prev => editing === 'new' ? [...prev, data] : prev.map(c => c.id === data.id ? data : c))
+    setEditing(null)
+  }
+
+  async function remove(c: ContractorContact) {
+    if (!confirm(`Remove ${c.name} from this contractor's contacts?`)) return
+    const { error } = await supabase.from('contractor_contacts').delete().eq('id', c.id)
+    if (error) { setError(error.message); return }
+    setContacts(prev => prev.filter(x => x.id !== c.id))
+    if (editing === c.id) setEditing(null)
+  }
+
+  const formEl = (
+    <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#f7f7f5', borderRadius: 6, padding: 10, marginBottom: 8 }}>
+      <Field label="Name *"><input className="input" autoFocus required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
+      <Field label="Role"><input className="input" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} placeholder="e.g. Office, Site supervisor, Accounts" /></Field>
+      <Field label="Email"><input className="input" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></Field>
+      <Field label="Phone"><input className="input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+      {error && <p style={{ fontSize: 12, color: '#c4554d', margin: 0 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: 13 }} disabled={saving || !form.name.trim()}>
+          {saving ? 'Saving…' : editing === 'new' ? 'Add' : 'Save'}
+        </button>
+        <button type="button" className="btn btn-secondary" style={{ padding: '6px 10px' }} onClick={() => setEditing(null)}><X size={14} /></button>
+      </div>
+    </form>
+  )
+
+  return (
+    <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+        <h4 style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Other Contacts</h4>
+        {editing === null && (
+          <button className="btn btn-ghost" style={{ padding: '2px 6px', color: '#787774' }} onClick={() => open()} title="Add a contact">
+            <Plus size={14} />
+          </button>
+        )}
+      </div>
+
+      {contacts.map(c => editing === c.id ? <div key={c.id}>{formEl}</div> : (
+        <div key={c.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', padding: '6px 0', borderTop: '1px solid #f1f1ef', fontSize: 13 }}>
+          <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+            <div style={{ fontWeight: 500, color: '#37352f' }}>
+              {c.name}{c.role && <span style={{ fontWeight: 400, color: '#787774' }}> · {c.role}</span>}
+            </div>
+            {c.email && <div style={{ color: '#787774' }}>{c.email}</div>}
+            {c.phone && <div style={{ color: '#787774' }}>{c.phone}</div>}
+          </div>
+          {editing === null && (
+            <div style={{ display: 'flex', flexShrink: 0 }}>
+              <button className="btn btn-ghost" style={{ padding: '2px 4px', color: '#787774' }} onClick={() => open(c)} title="Edit contact"><Pencil size={12} /></button>
+              <button className="btn btn-ghost" style={{ padding: '2px 4px', color: '#787774' }} onClick={() => remove(c)} title="Remove contact"><X size={13} /></button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {editing === 'new' && formEl}
+      {contacts.length === 0 && editing === null && (
+        <p style={{ fontSize: 13, color: '#787774', margin: 0 }}>No other contacts. Click + to add.</p>
+      )}
+      {error && editing === null && <p style={{ fontSize: 12, color: '#c4554d', margin: '6px 0 0' }}>{error}</p>}
     </div>
   )
 }

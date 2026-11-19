@@ -11,7 +11,7 @@ export default async function ContractorDetailPage({ params }: { params: Promise
   const { id } = await params
   const supabase = await createClient()
 
-  const [contractorRes, assignmentsRes, itemsRes, pendingRes, lastNotifiedRes] = await Promise.all([
+  const [contractorRes, assignmentsRes, itemsRes, pendingRes, lastNotifiedRes, contactsRes] = await Promise.all([
     supabase.from('contractors').select('*').eq('id', id).single(),
     supabase.from('project_trade_assignments').select('*, project:projects(id, name), trade:trades(id, name)').eq('contractor_id', id),
     supabase.from('maintenance_items').select(`
@@ -32,6 +32,7 @@ export default async function ContractorDetailPage({ params }: { params: Promise
       .not('contractor_notified_at', 'is', null)
       .order('contractor_notified_at', { ascending: false })
       .limit(1),
+    supabase.from('contractor_contacts').select('*').eq('contractor_id', id).order('created_at'),
   ])
 
   if (!contractorRes.data) notFound()
@@ -46,6 +47,7 @@ export default async function ContractorDetailPage({ params }: { params: Promise
       />
       <ContractorDetailClient
         contractor={contractorRes.data}
+        contacts={contactsRes.data ?? []}
         assignments={assignmentsRes.data ?? []}
         items={itemsRes.data ?? []}
         pendingItems={(pendingRes.data ?? []) as unknown as PendingNotifyItem[]}

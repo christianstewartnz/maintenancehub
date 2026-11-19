@@ -53,6 +53,17 @@ export interface Contractor {
   updated_at: string
 }
 
+/** Extra people at a contractor beyond the main contact (office, supervisor, accounts…). */
+export interface ContractorContact {
+  id: string
+  contractor_id: string
+  name: string
+  role: string | null
+  email: string | null
+  phone: string | null
+  created_at: string
+}
+
 export interface Trade {
   id: string
   project_id: string

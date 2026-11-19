@@ -130,6 +130,10 @@ body {
   background: #f7f7f5;
 }
 
+/* Row action buttons pinned to the right edge, so they stay reachable when the table scrolls sideways */
+.data-table .sticky-actions { position: sticky; right: 0; z-index: 1; background: white; width: 1%; box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.15); }
+.data-table tbody tr:hover td.sticky-actions { background: #f7f7f5; }
+
 /* Wide tables: tighter cells */
 .data-table-compact th, .data-table-compact td { padding-left: 8px; padding-right: 8px; }
 

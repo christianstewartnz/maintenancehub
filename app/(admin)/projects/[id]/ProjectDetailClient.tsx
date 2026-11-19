@@ -39,6 +39,9 @@ export default function ProjectDetailClient({ project: initialProject, units: in
   const [ownerForm, setOwnerForm] = useState(emptyOwnerForm)
   const [showOwnerForm, setShowOwnerForm] = useState(false)
   const [savingOwner, setSavingOwner] = useState(false)
+  const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null)
+  const [editOwnerForm, setEditOwnerForm] = useState(emptyOwnerForm)
+  const [ownerError, setOwnerError] = useState('')
   const [confirmDeleteUnit, setConfirmDeleteUnit] = useState<Unit | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState<Trade | null>(null)
@@ -107,6 +110,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
       notes: unit.notes ?? '',
     })
     setModalOwners(unit.owners ?? [])
+    setEditingOwnerId(null)
     setOwnerForm(emptyOwnerForm)
     setShowOwnerForm(false)
     setShowUnitModal(true)
@@ -125,6 +129,32 @@ export default function ProjectDetailClient({ project: initialProject, units: in
       setUnits(prev => prev.map(u => u.id === editingUnit.id ? { ...u, owners: [...(u.owners ?? []), data] } : u))
       setOwnerForm(emptyOwnerForm)
       setShowOwnerForm(false)
+    }
+    setSavingOwner(false)
+  }
+
+  function startEditOwner(o: UnitOwner) {
+    setEditingOwnerId(o.id)
+    setEditOwnerForm({ name: o.name, email: o.email ?? '', phone: o.phone ?? '' })
+    setOwnerError('')
+  }
+
+  async function handleUpdateOwner() {
+    if (!editingUnit || !editingOwnerId || !editOwnerForm.name.trim()) return
+    setSavingOwner(true)
+    setOwnerError('')
+    const { data, error } = await supabase
+      .from('unit_owners')
+      .update({ name: editOwnerForm.name.trim(), email: editOwnerForm.email.trim() || null, phone: editOwnerForm.phone.trim() || null })
+      .eq('id', editingOwnerId)
+      .select()
+      .single()
+    if (error || !data) {
+      setOwnerError(error?.message ?? 'Could not save owner.')
+    } else {
+      setModalOwners(o => o.map(x => x.id === data.id ? data : x))
+      setUnits(prev => prev.map(u => u.id === editingUnit.id ? { ...u, owners: (u.owners ?? []).map(x => x.id === data.id ? data : x) } : u))
+      setEditingOwnerId(null)
     }
     setSavingOwner(false)
   }
@@ -310,8 +340,8 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                 <thead>
                   <tr>
                     <th>Construction No.</th><th>Lot</th><th>Address</th>
-                    <th>Owners</th><th>Owner Contact</th><th>Access Contact</th>
-                    <th>Settlement</th><th>Maint. Due</th><th></th>
+                    <th>Owners</th><th className="hide-mobile">Owner Contact</th><th className="hide-mobile">Access Contact</th>
+                    <th className="hide-mobile">Settlement</th><th>Maint. Due</th><th className="sticky-actions"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -321,11 +351,12 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                       <td style={{ color: '#787774' }}>{u.lot_number ?? '—'}</td>
                       <td>{u.address ?? '—'}</td>
                       <td>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.name).join(', ') : '—'}</td>
-                      <td style={{ fontSize: 13, color: '#787774' }}>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.email).filter(Boolean).join(', ') : ''}</td>
-                      <td style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
-                      <td style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                      <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.owners && u.owners.length > 0 ? u.owners.map(o => o.email).filter(Boolean).join(', ') : ''}</td>
+                      <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.access_contact_name ?? '—'}</td>
+                      <td className="hide-mobile" style={{ fontSize: 13, color: '#787774' }}>{u.settlement_date ? new Date(u.settlement_date).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
                       <td style={{ fontSize: 13, fontWeight: u.settlement_date ? 500 : 400, color: dueDateStatus(u.settlement_date) }}>{maintenanceDueDate(u.settlement_date)}</td>
-                      <td style={{ display: 'flex', gap: 2 }}>
+                      <td className="sticky-actions">
+                        <div style={{ display: 'flex', gap: 2 }}>
                         <button
                           className="btn btn-ghost"
                           style={{ padding: '3px 6px', color: '#787774' }}
@@ -342,6 +373,7 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                         >
                           <Trash2 size={13} />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -442,16 +474,34 @@ export default function ProjectDetailClient({ project: initialProject, units: in
                     </div>
                     {modalOwners.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                        {modalOwners.map(o => (
-                          <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f7f7f5', borderRadius: 6, padding: '8px 12px' }}>
-                            <div>
+                        {modalOwners.map(o => editingOwnerId === o.id ? (
+                          <div key={o.id} className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: '#f7f7f5', borderRadius: 8, padding: 12 }}>
+                            <Field label="Name *"><input className="input" autoFocus value={editOwnerForm.name} onChange={e => setEditOwnerForm(f => ({ ...f, name: e.target.value }))} /></Field>
+                            <Field label="Email"><input className="input" type="email" value={editOwnerForm.email} onChange={e => setEditOwnerForm(f => ({ ...f, email: e.target.value }))} /></Field>
+                            <Field label="Phone"><input className="input" value={editOwnerForm.phone} onChange={e => setEditOwnerForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                              <button type="button" className="btn btn-primary" style={{ fontSize: 13 }} onClick={handleUpdateOwner} disabled={savingOwner || !editOwnerForm.name.trim()}>
+                                {savingOwner ? 'Saving…' : 'Save'}
+                              </button>
+                              <button type="button" className="btn btn-secondary" style={{ fontSize: 13 }} onClick={() => setEditingOwnerId(null)}>Cancel</button>
+                            </div>
+                            {ownerError && <p style={{ gridColumn: 'span 2', fontSize: 12, color: '#c4554d', margin: 0 }}>{ownerError}</p>}
+                          </div>
+                        ) : (
+                          <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#f7f7f5', borderRadius: 6, padding: '8px 12px' }}>
+                            <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                               <span style={{ fontWeight: 500, fontSize: 13 }}>{o.name}</span>
                               {o.email && <span style={{ fontSize: 12, color: '#787774', marginLeft: 8 }}>{o.email}</span>}
                               {o.phone && <span style={{ fontSize: 12, color: '#787774', marginLeft: 8 }}>{o.phone}</span>}
                             </div>
-                            <button type="button" onClick={() => handleRemoveOwner(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#787774', lineHeight: 1 }}>
-                              <X size={14} />
-                            </button>
+                            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                              <button type="button" title="Edit owner" onClick={() => startEditOwner(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#787774', lineHeight: 1 }}>
+                                <Pencil size={13} />
+                              </button>
+                              <button type="button" title="Remove owner" onClick={() => handleRemoveOwner(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#787774', lineHeight: 1 }}>
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
