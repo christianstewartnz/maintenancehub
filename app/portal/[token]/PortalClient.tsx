@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2, KeyRound } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
 import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
@@ -36,6 +36,43 @@ function isNewItem(item: { status: string; contractor_notified_at?: string | nul
   if (item.status !== 'assigned' && item.status !== 'logged') return false
   if (!item.contractor_notified_at) return true
   return Date.now() - new Date(item.contractor_notified_at).getTime() < PORTAL_NEW_DAYS * 86400000
+}
+
+// ---------- Site access note ----------
+/** Who the contractor should call to get in: the unit's access contact if one is set, otherwise the owner. */
+function AccessNote({ unit }: { unit: any }) {
+  const name: string = unit.access_contact_name?.trim() ?? ''
+  const phone: string = unit.access_contact_phone?.trim() ?? ''
+  const email: string = unit.access_contact_email?.trim() ?? ''
+  const stop = (e: React.MouseEvent) => e.stopPropagation()
+  const link = { color: '#2f6fcf', textDecoration: 'none', overflowWrap: 'anywhere' as const }
+  return (
+    <div style={{
+      marginTop: 8, padding: '6px 10px', background: '#eef4ff', border: '1px solid #d6e4fb', borderRadius: 6,
+      display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 13, color: '#2f4a7a',
+    }}>
+      <KeyRound size={13} style={{ flexShrink: 0 }} />
+      {name ? (
+        <>
+          <span>Contact <strong>{name}</strong> for access</span>
+          {phone && (
+            <>
+              <Phone size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
+              <a href={`tel:${phone.replace(/[^+\d]/g, '')}`} onClick={stop} style={link}>{phone}</a>
+            </>
+          )}
+          {email && (
+            <>
+              <Mail size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
+              <a href={`mailto:${email}`} onClick={stop} style={link}>{email}</a>
+            </>
+          )}
+        </>
+      ) : (
+        <span>Contact the owner for access</span>
+      )}
+    </div>
+  )
 }
 
 // ---------- Item accordion ----------
@@ -489,7 +526,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                 </div>
 
                                 {/* Outstanding vs completed counts, one line each */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, fontWeight: 500, margin: `4px 0 ${hasOwners || hasAddress ? 6 : 0}px` }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13, fontWeight: 500, margin: '4px 0 6px' }}>
                                   {summary.outstanding > 0 && (
                                     <span className="unit-count-outstanding" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                       <Clock size={12} /> {summary.outstanding} outstanding
@@ -541,6 +578,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     )}
                                   </div>
                                 )}
+
+                                <AccessNote unit={unit} />
+
                               </div>
 
                               <div style={{ color: '#a0a09e', flexShrink: 0, marginTop: 2 }}>
