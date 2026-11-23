@@ -278,6 +278,7 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
   type Result = 'sent' | 'skipped' | string
   const [running, setRunning] = useState(false)
   const [results, setResults] = useState<Record<string, Result>>({})
+  const [message, setMessage] = useState('')
   const sendable = list.filter(c => c.email)
   const done = Object.keys(results).length > 0 && !running
 
@@ -288,7 +289,7 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
       const res = await fetch(`/api/contractors/${c.id}/notify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'email', item_ids: ids }),
+        body: JSON.stringify({ mode: 'email', item_ids: ids, message: message.trim() || undefined }),
       })
       const json = await res.json().catch(() => ({}))
       if (res.ok) {
@@ -330,6 +331,22 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
               })}
             </tbody>
           </table>
+          <div>
+            <label htmlFor="notify-all-message" style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5 }}>
+              Note to contractors <span style={{ color: '#787774', fontWeight: 400 }}>(optional)</span>
+            </label>
+            <textarea
+              id="notify-all-message"
+              className="input"
+              rows={3}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              disabled={running || done}
+              maxLength={4000}
+              placeholder="Added to every email above, under the greeting."
+              style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
+            />
+          </div>
           {Object.values(results).some(r => r !== 'sent') && (
             <p style={{ margin: 0, fontSize: 13, color: '#e03131' }}>
               {Object.entries(results).filter(([, r]) => r !== 'sent').map(([id, r]) => `${list.find(c => c.id === id)?.company_name}: ${r}`).join(' · ')}

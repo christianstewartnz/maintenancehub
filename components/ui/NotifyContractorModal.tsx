@@ -24,6 +24,7 @@ interface Props {
 export default function NotifyContractorModal({ contractor, items, onClose, onDone }: Props) {
   const [busy, setBusy] = useState<'email' | 'mark' | null>(null)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
 
   async function run(mode: 'email' | 'mark') {
     setBusy(mode)
@@ -32,7 +33,7 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
     const res = await fetch(`/api/contractors/${contractor.id}/notify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, item_ids: ids }),
+      body: JSON.stringify({ mode, item_ids: ids, message: mode === 'email' ? message.trim() || undefined : undefined }),
     })
     const json = await res.json().catch(() => ({}))
     setBusy(null)
@@ -74,7 +75,26 @@ export default function NotifyContractorModal({ contractor, items, onClose, onDo
               </tbody>
             </table>
           </div>
-          {error && <p style={{ color: '#e03131', fontSize: 14, margin: 0 }}>{error}</p>}
+          {contractor.email && (
+            <div>
+              <label htmlFor="notify-message" style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5 }}>
+                Note to contractor <span style={{ color: '#787774', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                id="notify-message"
+                className="input"
+                rows={4}
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                disabled={!!busy}
+                maxLength={4000}
+                placeholder="e.g. Please prioritise the leak at Unit 3 — owner is away from Friday."
+                style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
+              />
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#787774' }}>Added near the top of the email, under the greeting.</p>
+            </div>
+          )}
+          {error &&<p style={{ color: '#e03131', fontSize: 14, margin: 0 }}>{error}</p>}
         </div>
         <div className="modal-footer" style={{ alignItems: 'center' }}>
           <button

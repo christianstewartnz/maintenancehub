@@ -17,11 +17,13 @@ interface PendingItem {
 
 /**
  * POST /api/contractors/[id]/notify
- * Body: { mode?: 'email' | 'mark', item_ids?: string[] }
+ * Body: { mode?: 'email' | 'mark', item_ids?: string[], message?: string }
  *
  *  - mode 'email' (default): email the contractor a summary of their pending
  *    items + portal link, then stamp those items as notified.
  *  - mode 'mark': stamp them as notified without sending (e.g. told by phone).
+ *
+ * `message` is an optional note added near the top of the email (ignored for 'mark').
  *
  * `item_ids` limits the action to the items the admin previewed, so an item
  * assigned while the dialog was open isn't silently marked as told.
@@ -36,8 +38,9 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json().catch(() => ({})) as { mode?: string; item_ids?: unknown }
+  const body = await req.json().catch(() => ({})) as { mode?: string; item_ids?: unknown; message?: unknown }
   const mode = body.mode === 'mark' ? 'mark' : 'email'
+  const message = typeof body.message === 'string' ? body.message.trim().slice(0, 4000) || null : null
   const onlyIds = Array.isArray(body.item_ids) ? body.item_ids.filter((x): x is string => typeof x === 'string') : null
 
   const { data: contractor } = await supabase
@@ -79,6 +82,7 @@ export async function POST(
       contractorName: contractor.company_name,
       contactName: contractor.contact_name,
       portalUrl: `${appUrl}/portal/${contractor.portal_token}`,
+      message,
       items: (items as unknown as PendingItem[]).map(i => ({
         itemNumber: i.item_number,
         title: i.title,
@@ -116,6 +120,7 @@ export async function POST(
       contractor: contractor.company_name,
       method: mode === 'email' ? 'email' : 'manual',
       ...(mode === 'email' ? { to: contractor.email } : {}),
+      ...(mode === 'email' && message ? { message } : {}),
     },
     performed_by: user.email ?? 'admin',
   })))

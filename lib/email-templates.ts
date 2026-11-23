@@ -113,8 +113,11 @@ export function contractorNewItemsEmail(opts: {
   portalUrl: string
   /** The staff member who clicked Notify; shown as the sign-off. */
   sender?: { name: string | null; email: string | null }
+  /** Optional free-text note typed in the Notify dialog, shown under the greeting. */
+  message?: string | null
 }): { subject: string; html: string; text: string } {
   const { contractorName, contactName, items, portalUrl, sender } = opts
+  const message = opts.message?.trim() || null
   const n = items.length
   const senderName = sender?.name?.trim() || null
   const senderEmail = sender?.email?.trim() || null
@@ -151,6 +154,7 @@ export function contractorNewItemsEmail(opts: {
   const text = [
     `Hi ${contactName || contractorName},`,
     '',
+    ...(message ? [message, ''] : []),
     `You have ${n} new item${n !== 1 ? 's' : ''} assigned to you. Full details, site access contacts and photos are on your portal:`,
     portalUrl,
     ...Array.from(byProject.entries()).flatMap(([project, list]) => [
@@ -175,6 +179,7 @@ export function contractorNewItemsEmail(opts: {
         <p style="color: #787774; margin-top: 0;">${esc(contractorName)}</p>
         <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
         <p>Hi ${esc(contactName || contractorName)},</p>
+        ${message ? `<p>${esc(message).replace(/\r?\n/g, '<br>')}</p>` : ''}
         <p>You have <strong>${n} new item${n !== 1 ? 's' : ''}</strong> assigned to you. Full details, site access contacts and photos are on your portal.</p>
         <a href="${esc(portalUrl)}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 4px;">Open your jobs</a>
         ${sections}
