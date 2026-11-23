@@ -5,9 +5,10 @@
  */
 
 import MailComposer from 'nodemailer/lib/mail-composer'
+import { SIGNATURE_HTML, signatureAttachments } from './email-signature'
 
 export interface ReminderOwner { name: string | null; email: string | null }
-export interface ReminderAttachment { filename: string; content: Buffer; contentType?: string }
+export interface ReminderAttachment { filename: string; content: Buffer; contentType?: string; cid?: string }
 
 /** 90 days after settlement: the last day owners can submit their form. */
 export function maintenanceDueDate(settlementDate: string): Date {
@@ -65,9 +66,8 @@ ${p('Attached is a copy of the maintenance form in case you cannot find the vers
 ${p('A reminder to please return your form in digital copy (i.e. in a word format) as this makes processing much easier.')}
 ${p('Once we have your list and we have passed 90 days, the forms will be reviewed &amp; processed, then the relevant trades will be organised to come through and make good any items cited in as little a period of time so to cause as little inconvenience/disturbance to you as possible.')}
 ${p('If you have any questions about the process of maintenance please don’t hesitate to contact me.')}
-<p style="margin: 24px 0 0;"><b>Regards</b></p>
-<p style="margin: 12px 0 0;"><b>Christian Stewart</b></p>
-<p style="margin: 24px 0 0;"><b>STRATUM MANAGEMENT LTD</b><br>PO Box 11 680<br>Manners Street<br>Wellington<br>Telephone 027 542 1192<br><a href="https://www.stratummanagement.co.nz/">https://www.stratummanagement.co.nz/</a></p>
+${p('&nbsp;')}
+${SIGNATURE_HTML}
 </div>`
 
   return { to: ownerEmails(opts.owners), subject: `${opts.projectName} - Maintenance reminder`, html }
@@ -80,7 +80,8 @@ export async function buildDraftEml(opts: { to: string[]; subject: string; html:
     subject: opts.subject,
     html: opts.html,
     headers: { 'X-Unsent': '1' },
-    attachments: opts.attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+    attachments: [...opts.attachments, ...signatureAttachments()]
+      .map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType, cid: a.cid })),
   })
   return composer.compile().build()
 }
