@@ -386,7 +386,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     return (
       <tr key={`${step.id}-edit`} style={{ background: '#fbfbfa' }}>
         <td />
-        <td colSpan={10} style={{ paddingTop: 4, paddingBottom: 12 }}>
+        <td colSpan={9} style={{ paddingTop: 4, paddingBottom: 12 }}>
           <form className="stack-mobile"
             onSubmit={e => { e.preventDefault(); saveStep(step, job) }}
             onKeyDown={e => { if (e.key === 'Escape') setEditingStep(null) }}
@@ -552,8 +552,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           )}
         </td>
         <td style={{ fontSize: 13, color: '#787774', whiteSpace: 'nowrap' }}>{nested ? '' : unit?.project?.name ?? '—'}</td>
-        <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{nested ? '' : unit?.unit_identifier ?? '—'}</td>
-        <td className="hide-narrow" style={{ fontSize: 13, color: '#787774', minWidth: 140, maxWidth: 220 }}>{nested ? '' : unit?.address ?? '—'}</td>
+        <td style={{ fontSize: 13, color: '#787774', minWidth: 140, maxWidth: 220 }}>{nested ? '' : unit?.address ?? '—'}</td>
         <td style={{ whiteSpace: 'nowrap' }}>
           {isJob ? addStepPicker : (() => {
             const tradeId = item.trade_id ?? (item.trade as any)?.id ?? ''
@@ -828,7 +827,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
                     style={checkboxStyle}
                   />
                 </th>
-                <th>#</th><th>Title</th><th>Project</th><th style={{ whiteSpace: 'normal' }}>Construction No.</th><th className="hide-narrow">Address</th>
+                <th>#</th><th>Title</th><th>Project</th><th>Address</th>
                 <th>Trade</th><th>Contractor</th><th>Responsible</th><th>Status</th>
                 <th>Age</th>
               </tr>
