@@ -27,6 +27,33 @@ export async function getRecipients(service: SupabaseClient, toggle: NotifyToggl
   return resolve(service, (rows ?? []) as NotificationPreferences[])
 }
 
+/**
+ * Who gets a contractor alert (completed / commented) about one item:
+ *  - the item's responsible person (mh_item_responsible: Responsible → parent job's → project main contact), and
+ *  - active admins who chose "alerts for all projects",
+ * in both cases only if they have this alert switched on and are active.
+ * Needs a service-role client.
+ */
+export async function getItemAlertRecipients(
+  service: SupabaseClient,
+  toggle: NotifyToggle,
+  itemId: string,
+): Promise<Recipient[]> {
+  const [{ data: responsibleId }, { data: rows }, { data: profiles }] = await Promise.all([
+    service.rpc('mh_item_responsible', { p_item_id: itemId }),
+    service.from('notification_preferences').select('*').eq(toggle, true),
+    service.from('profiles').select('id, role, is_active'),
+  ])
+  const byId = new Map((profiles ?? []).map(p => [p.id as string, p as { role: string; is_active: boolean }]))
+  const chosen = ((rows ?? []) as NotificationPreferences[]).filter(prefs => {
+    const p = byId.get(prefs.user_id)
+    if (!p?.is_active) return false
+    if (prefs.user_id === responsibleId) return true
+    return p.role === 'admin' && prefs.alerts_all_projects
+  })
+  return resolve(service, chosen)
+}
+
 /** Resolves preference rows to recipients, dropping users without any address. */
 export async function resolve(service: SupabaseClient, rows: NotificationPreferences[]): Promise<Recipient[]> {
   const out: Recipient[] = []

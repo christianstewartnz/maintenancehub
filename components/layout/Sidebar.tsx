@@ -31,7 +31,7 @@ const NAV_ITEMS = [
   { href: '/settings',     label: 'Settings',     icon: Settings },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)

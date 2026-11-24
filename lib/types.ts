@@ -164,6 +164,28 @@ export interface Profile {
   full_name: string | null
 }
 
+/** 'admin' sees and manages everything; 'staff' only sees projects they're assigned to. */
+export type UserRole = 'admin' | 'staff'
+
+/** A profile with the permission fields (role, active, phone). */
+export interface StaffProfile extends Profile {
+  role: UserRole
+  is_active: boolean
+  phone: string | null
+}
+
+/** A staff member assigned to a project. is_primary = the project's main contact. */
+export interface ProjectStaff {
+  project_id: string
+  user_id: string
+  is_primary: boolean
+  created_at: string
+  profile?: StaffProfile
+}
+
+/** Columns to select from profiles for a StaffProfile. */
+export const STAFF_PROFILE_SELECT = 'id, email, full_name, role, is_active, phone'
+
 export type PhotoType = 'before' | 'after'
 
 export interface MaintenanceItemAttachment {
@@ -223,6 +245,8 @@ export interface NotificationPreferences {
   report_frequency: ReportFrequency
   report_scope: ReportScope
   report_projects: string[]
+  /** Admins only: get contractor alerts for every project, not just items they are responsible for. */
+  alerts_all_projects: boolean
   created_at: string
   updated_at: string
 }
