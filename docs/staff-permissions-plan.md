@@ -84,6 +84,6 @@ Owns: `app/(admin)/maintenance/**`, `app/(admin)/sign-off/**`, `app/(admin)/dash
 ## Go-live checklist (later, after review)
 
 1. Merge to `main`, deploy.
-2. Run `supabase/cutover/portal_release_backfill.sql`.
+2. **Do not** run `supabase/cutover/portal_release_backfill.sql` — Christian decided (2026-11-24) that only notified items should show on portals. At go-live the ~49 never-notified items (all still Logged, none started) drop off portals until someone notifies the contractor. The script is kept only in case that decision is reversed.
 3. Set Aidan and the gmail account to `staff`; assign Aidan's projects; set notification `alerts_all_projects=false` for non-admins.
 4. Invite new staff.
