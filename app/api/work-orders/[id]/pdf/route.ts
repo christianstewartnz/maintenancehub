@@ -1,15 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import { generateWorkOrderPDF } from '@/lib/generate-pdf'
+import { requireUser } from '@/lib/auth'
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
+  const auth = await requireUser()
+  if (auth.error) return auth.error
+  // The user's own client: RLS hides work orders on projects they aren't on (→ 404)
   const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return new Response('Unauthorized', { status: 401 })
 
   const [{ data: workOrder }, { data: items }] = await Promise.all([
     supabase

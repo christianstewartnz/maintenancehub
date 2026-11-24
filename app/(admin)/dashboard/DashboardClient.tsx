@@ -17,6 +17,7 @@ interface Props {
   items: MaintenanceItem[]
   scheduledItems: MaintenanceItem[]
   loadedAt: number
+  isAdmin: boolean
 }
 
 // ─── Date helpers ────────────────────────────────────────────────────────────
@@ -392,7 +393,7 @@ function MonthCalendar({ items, onClose }: { items: MaintenanceItem[]; onClose: 
 }
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
-export default function DashboardClient({ projects, items, scheduledItems, loadedAt }: Props) {
+export default function DashboardClient({ projects, items, scheduledItems, loadedAt, isAdmin }: Props) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<MaintenanceStatus | 'all'>('all')
@@ -496,7 +497,13 @@ export default function DashboardClient({ projects, items, scheduledItems, loade
       </div>
 
       {/* Project accordion */}
-      {projectGroups.length === 0 ? (
+      {projects.length === 0 && !isAdmin ? (
+        // Staff only see their own projects (RLS); none yet means nothing to show
+        <div className="empty-state">
+          <p style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>You haven&apos;t been assigned to any projects yet</p>
+          <p style={{ fontSize: 14 }}>Ask an admin to add you to a project. Its maintenance items will show here.</p>
+        </div>
+      ) : projectGroups.length === 0 ? (
         <div className="empty-state">
           <p style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>No open maintenance items</p>
           <p style={{ fontSize: 14 }}>All clear! Create maintenance items from the Maintenance page.</p>

@@ -1,15 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { sendEmail, senderAddress, SENDER_NAME } from '@/lib/mailer'
 import { recipientEmail } from '@/lib/notify-recipients'
 
 /**
  * POST /api/email/test — sends a test email through the SMTP server to the
  * signed-in user's notification address (their saved override, else login email).
+ * Admins only: it's an email-setup tool.
  */
 export async function POST() {
+  const guard = await requireAdmin()
+  if (guard.error) return guard.error
+  const { user } = guard.session
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: prefs } = await supabase
     .from('notification_preferences')

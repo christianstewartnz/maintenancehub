@@ -2,30 +2,29 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import ContractorDetailClient from './ContractorDetailClient'
-import { NOT_PENDING_FILTER } from '@/lib/contractor-notify'
+import { fetchMyPendingNotify, withResponsible } from '@/lib/contractor-notify'
 import type { PendingNotifyItem } from '@/components/ui/NotifyContractorModal'
+import { getSession, isAdmin } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ContractorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
+  const session = await getSession()
+  const me = session?.user.id ?? ''
+  const admin = isAdmin(session?.profile)
 
-  const [contractorRes, assignmentsRes, itemsRes, pendingRes, lastNotifiedRes, contactsRes] = await Promise.all([
+  const [contractorRes, assignmentsRes, itemsRes, pending, lastNotifiedRes, contactsRes] = await Promise.all([
     supabase.from('contractors').select('*').eq('id', id).single(),
     supabase.from('project_trade_assignments').select('*, project:projects(id, name), trade:trades(id, name)').eq('contractor_id', id),
     supabase.from('maintenance_items').select(`
       id, item_number, title, status, created_at, completed_at, contractor_notified_at, portal_hidden,
-      unit:units(id, unit_identifier, address, project:projects(id, name))
+      assigned_to, parent_item_id,
+      unit:units(id, project_id, unit_identifier, address, project:projects(id, name))
     `).eq('contractor_id', id).is('archived_at', null).order('created_at', { ascending: false }).limit(500),
-    supabase.from('maintenance_items')
-      .select('id, item_number, title, unit:units(unit_identifier, address, project:projects(name))')
-      .eq('contractor_id', id)
-      .is('contractor_notified_at', null)
-      .eq('portal_hidden', false)
-      .is('archived_at', null)
-      .not('status', 'in', NOT_PENDING_FILTER)
-      .order('created_at'),
+    // The Notify card is the user's own items: they only notify about those.
+    fetchMyPendingNotify(supabase, me, { contractorId: id }),
     supabase.from('maintenance_items')
       .select('contractor_notified_at')
       .eq('contractor_id', id)
@@ -36,6 +35,9 @@ export default async function ContractorDetailPage({ params }: { params: Promise
   ])
 
   if (!contractorRes.data) notFound()
+
+  // responsible_id lets "Show in portal" put an item back on the user's Notify list only if it's theirs.
+  const items = await withResponsible(supabase, (itemsRes.data ?? []) as unknown as Parameters<typeof withResponsible>[1])
 
   return (
     <div>
@@ -49,9 +51,12 @@ export default async function ContractorDetailPage({ params }: { params: Promise
         contractor={contractorRes.data}
         contacts={contactsRes.data ?? []}
         assignments={assignmentsRes.data ?? []}
-        items={itemsRes.data ?? []}
-        pendingItems={(pendingRes.data ?? []) as unknown as PendingNotifyItem[]}
+        items={items}
+        pendingItems={pending.mine as unknown as PendingNotifyItem[]}
+        otherPendingCount={admin ? pending.others.length : 0}
         lastNotifiedAt={lastNotifiedRes.data?.[0]?.contractor_notified_at ?? null}
+        isAdmin={admin}
+        userId={me}
       />
     </div>
   )

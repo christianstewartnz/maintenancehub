@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '@/lib/auth'
 import { diagnoseSmtp, smtpTestSend } from '@/lib/mailer'
 
 /**
- * GET /api/email/diagnose — signed-in users only.
+ * GET /api/email/diagnose — admins only (it reveals server mail settings).
  * Shows which email settings the server can see (never the password) and
  * whether it can log in to the SMTP server.
  *
@@ -10,9 +10,9 @@ import { diagnoseSmtp, smtpTestSend } from '@/lib/mailer'
  * user's own address and returns the full SMTP conversation (credentials hidden).
  */
 export async function GET(req: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+  const guard = await requireAdmin()
+  if (guard.error) return guard.error
+  const { user } = guard.session
 
   const settings = await diagnoseSmtp()
   const wantsSend = new URL(req.url).searchParams.get('send') === '1'

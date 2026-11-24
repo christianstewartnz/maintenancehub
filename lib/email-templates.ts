@@ -111,8 +111,8 @@ export function contractorNewItemsEmail(opts: {
     owners?: { name: string; email: string | null; phone: string | null }[]
   }[]
   portalUrl: string
-  /** The staff member who clicked Notify; shown as the sign-off. */
-  sender?: { name: string | null; email: string | null }
+  /** The staff member who clicked Notify: shown as the contractor's contact and the sign-off. */
+  sender?: { name: string | null; email: string | null; phone?: string | null }
   /** Optional free-text note typed in the Notify dialog, shown under the greeting. */
   message?: string | null
 }): { subject: string; html: string; text: string } {
@@ -121,7 +121,16 @@ export function contractorNewItemsEmail(opts: {
   const n = items.length
   const senderName = sender?.name?.trim() || null
   const senderEmail = sender?.email?.trim() || null
+  const senderPhone = sender?.phone?.trim() || null
   const hasSignOff = !!(senderName || senderEmail)
+  const tel = (phone: string) => `tel:${esc(phone.replace(/[^+\d]/g, ''))}`
+  // "Your contact for these items: Name · phone · email" — the person who sent it.
+  const contactText = [senderName, senderPhone, senderEmail].filter(Boolean).join(' · ')
+  const contactHtml = [
+    senderName ? `<strong>${esc(senderName)}</strong>` : null,
+    senderPhone ? `<a href="${tel(senderPhone)}" style="color: #2383e2;">${esc(senderPhone)}</a>` : null,
+    senderEmail ? `<a href="mailto:${esc(senderEmail)}" style="color: #2383e2;">${esc(senderEmail)}</a>` : null,
+  ].filter(Boolean).join(' · ')
 
   // Group by project so a contractor working across sites can scan it quickly.
   const byProject = new Map<string, typeof items>()
@@ -157,6 +166,7 @@ export function contractorNewItemsEmail(opts: {
     ...(message ? [message, ''] : []),
     `You have ${n} new item${n !== 1 ? 's' : ''} assigned to you. Full details, site access contacts and photos are on your portal:`,
     portalUrl,
+    ...(hasSignOff ? ['', `Your contact for these items: ${contactText}`] : []),
     ...Array.from(byProject.entries()).flatMap(([project, list]) => [
       '',
       project,
@@ -167,7 +177,7 @@ export function contractorNewItemsEmail(opts: {
     ]),
     '',
     'Your portal always shows every open job assigned to you. Please update each item there as you schedule and complete the work.',
-    ...(hasSignOff ? ['', 'Thanks,', ...(senderName ? [senderName] : []), ...(senderEmail ? [senderEmail] : [])] : []),
+    ...(hasSignOff ? ['', 'Thanks,', ...(senderName ? [senderName] : []), ...(senderPhone ? [senderPhone] : []), ...(senderEmail ? [senderEmail] : [])] : []),
   ].join('\n')
 
   return {
@@ -182,10 +192,12 @@ export function contractorNewItemsEmail(opts: {
         ${message ? `<p>${esc(message).replace(/\r?\n/g, '<br>')}</p>` : ''}
         <p>You have <strong>${n} new item${n !== 1 ? 's' : ''}</strong> assigned to you. Full details, site access contacts and photos are on your portal.</p>
         <a href="${esc(portalUrl)}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 4px;">Open your jobs</a>
+        ${hasSignOff ? `<p style="margin: 12px 0 0; padding: 10px 12px; background: #f7f7f5; border-radius: 6px; font-size: 14px;">Your contact for these items: ${contactHtml}</p>` : ''}
         ${sections}
         ${hasSignOff ? `
         <p style="margin: 24px 0 0;">Thanks,<br>
           ${senderName ? `<strong>${esc(senderName)}</strong><br>` : ''}
+          ${senderPhone ? `<a href="${tel(senderPhone)}" style="color: #2383e2;">${esc(senderPhone)}</a><br>` : ''}
           ${senderEmail ? `<a href="mailto:${esc(senderEmail)}" style="color: #2383e2;">${esc(senderEmail)}</a>` : ''}
         </p>
         ` : ''}

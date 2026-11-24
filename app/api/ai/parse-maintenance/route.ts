@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { formatUnitLabel } from '@/lib/utils'
+import { requireUser } from '@/lib/auth'
 
 const client = new Anthropic()
 
@@ -38,6 +39,9 @@ function resolveUnit(units: Unit[], unitId?: string | null, hint?: string | null
 }
 
 export async function POST(req: Request) {
+  // Signed-in, active users only: each call spends Anthropic credit
+  const auth = await requireUser()
+  if (auth.error) return auth.error
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'AI parsing is not configured (missing ANTHROPIC_API_KEY)' }, { status: 500 })
   }

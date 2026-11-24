@@ -5,10 +5,11 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, STATUS_LABELS, STATUS_FLOW } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile, ItemStep } from '@/lib/types'
+import type { MaintenanceItem, ActivityLog, ContractorComment, ItemUpdate, MaintenanceItemAttachment, MaintenanceStatus, Trade, Profile, ItemStep, ProjectStaff } from '@/lib/types'
 import StepsPanel from './StepsPanel'
 import Link from 'next/link'
-import { profileName } from '@/lib/assignees'
+import { fallbackResponsibleLabel, profileName } from '@/lib/assignees'
+import { primaryContactId, projectStaffProfiles } from '@/lib/staff'
 import { Pencil, Mail, CheckCircle2, RotateCcw, Archive, ArchiveRestore } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, type PhotoWithUrl } from '@/lib/photos'
@@ -27,12 +28,15 @@ interface Props {
   /** On a job: its steps. On a step: all steps of its job (its siblings, itself included). */
   steps: ItemStep[]
   /** On a step: the job it belongs to. */
-  parent: { id: string; item_number: string; title: string; description: string | null; status: MaintenanceStatus; archived_at: string | null } | null
+  parent: { id: string; item_number: string; title: string; description: string | null; status: MaintenanceStatus; archived_at: string | null; assigned_to?: string | null } | null
+  /** Every profile, for showing names. */
   users: Profile[]
+  /** This item's project staff: the Responsible choices and the main contact. */
+  projectStaff: ProjectStaff[]
   currentUserId: string
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, tradeAssignments, steps, parent, users, currentUserId }: Props) {
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, tradeAssignments, steps, parent, users, projectStaff, currentUserId }: Props) {
   const [item, setItem] = useState(initial)
   const [stepsKey, setStepsKey] = useState(0)
   const isStep = !!item.parent_item_id
@@ -439,17 +443,33 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
       {/* Sidebar */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <InfoCard title="Responsible">
-          <select
-            className="input"
-            value={item.assigned_to ?? ''}
-            onChange={e => saveAssignee(e.target.value || null)}
-            disabled={savingAssignee}
-            aria-label="Responsible"
-          >
-            <option value="">No one (everyone)</option>
-            {users.map(u => <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>)}
-          </select>
-          {item.assigned_to !== currentUserId && (
+          {(() => {
+            const projectId = item.unit?.project?.id ?? ''
+            const staff = projectStaffProfiles(projectStaff, projectId)
+            // No one set: a step falls to its job's person, otherwise the project's main contact
+            const fromJob = !!parent?.assigned_to
+            const fallbackId = parent?.assigned_to || primaryContactId(projectStaff.filter(s => s.project_id === projectId))
+            const fallback = fallbackId ? users.find(u => u.id === fallbackId) ?? { id: fallbackId, email: null, full_name: null } : null
+            const assigned = item.assigned_to
+            const assignedUser = assigned ? users.find(u => u.id === assigned) : undefined
+            return (
+              <select
+                className="input"
+                value={assigned ?? ''}
+                onChange={e => saveAssignee(e.target.value || null)}
+                disabled={savingAssignee}
+                aria-label="Responsible"
+                style={assigned ? undefined : { color: '#9b9a97' }}
+              >
+                <option value="">{fallbackResponsibleLabel(fallback, fromJob, currentUserId)}</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>)}
+                {assigned && !staff.some(u => u.id === assigned) && (
+                  <option value={assigned}>{assignedUser ? `${profileName(assignedUser)} (not on project)` : 'Unknown user'}</option>
+                )}
+              </select>
+            )
+          })()}
+          {item.assigned_to !== currentUserId && projectStaff.some(s => s.user_id === currentUserId) && (
             <button
               className="btn btn-ghost"
               style={{ marginTop: 6, fontSize: 12, color: '#2383e2', padding: '2px 0' }}

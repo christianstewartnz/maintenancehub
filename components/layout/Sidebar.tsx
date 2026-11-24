@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { NOT_PENDING_FILTER, COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
+import { fetchMyPendingNotify, COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
 import StratumLogo from '@/components/ui/StratumLogo'
 
 const NAV_ITEMS = [
@@ -42,24 +42,22 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     async function fetchCount() {
-      const [{ count }, { count: toNotify }] = await Promise.all([
+      const [{ count }, { data: { session } }] = await Promise.all([
         supabase
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
           .eq('status', 'contractor_complete')
           .eq('has_steps', false) // a job split into steps is signed off through its steps
           .is('archived_at', null),
-        supabase
-          .from('maintenance_items')
-          .select('id', { count: 'exact', head: true })
-          .not('contractor_id', 'is', null)
-          .is('contractor_notified_at', null)
-          .eq('portal_hidden', false)
-          .is('archived_at', null)
-          .not('status', 'in', NOT_PENDING_FILTER),
+        supabase.auth.getSession(),
       ])
       setSignOffCount(count ?? 0)
-      setNotifyCount(toNotify ?? 0)
+      // "To notify" is only the user's own items (effective responsible = me): that's what they can send.
+      // getSession() is only used for the user id here, not to authorise anything (RLS does that).
+      const userId = session?.user.id
+      if (!userId) return
+      const { mine } = await fetchMyPendingNotify(supabase, userId, { select: 'id, assigned_to, parent_item_id, unit:units(project_id)' })
+      setNotifyCount(mine.length)
     }
     fetchCount()
     const channel = supabase
@@ -137,7 +135,7 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
             const active = pathname === href || (href !== '/' && pathname.startsWith(href))
             const badgeCount = href === '/sign-off' ? signOffCount : href === '/contractors' ? notifyCount : 0
             const badgeColor = href === '/contractors' ? '#2383e2' : '#e03c3c'
-            const badgeTitle = href === '/contractors' ? `${notifyCount} assigned item${notifyCount !== 1 ? 's' : ''} not yet emailed to contractors` : undefined
+            const badgeTitle = href === '/contractors' ? `${notifyCount} of your assigned item${notifyCount !== 1 ? 's' : ''} not yet emailed to contractors` : undefined
             const showBadge = badgeCount > 0
             return (
               <Link

@@ -22,6 +22,8 @@ interface Item {
   updated_at: string
   contractor_id: string | null
   assigned_to: string | null
+  /** Effective responsible: own Responsible, else the job's, else the project's main contact. */
+  responsible: string | null
   unit: any
   contractor: any
   lastComment: { author: string; content: string; created_at: string } | null
@@ -84,7 +86,6 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
     } catch {}
   }
 
-  const userLabel = (u: Profile) => `${profileName(u)}${u.id === currentUserId ? ' (me)' : ''}`
 
   const unitsForProject = useMemo(() => {
     if (!filterProject) return []
@@ -112,7 +113,7 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
     if (filterUnit) result = result.filter(i => i.unit?.id === filterUnit)
     if (filterContractor === 'none') result = result.filter(i => !(i.contractor_id ?? i.contractor?.id))
     else if (filterContractor) result = result.filter(i => (i.contractor_id ?? i.contractor?.id) === filterContractor)
-    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
+    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, i.responsible, filterAssignee, currentUserId))
     return result
   }, [queue, search, filterProject, filterUnit, filterContractor, filterAssignee, currentUserId])
 
@@ -225,10 +226,10 @@ export default function SignOffClient({ items: allItems, projects, contractors, 
             onChange={e => changeAssigneeFilter(e.target.value)}
             aria-label="Filter by who's responsible"
           >
-            <option value="">Everyone&apos;s items</option>
-            <option value={ASSIGNEE_ME}>Mine + no one responsible</option>
-            {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
-            <option value={ASSIGNEE_UNASSIGNED}>Only no one responsible</option>
+            <option value="">All items</option>
+            <option value={ASSIGNEE_ME}>Mine</option>
+            {users.filter(u => u.id !== currentUserId).map(u => <option key={u.id} value={u.id}>{profileName(u)}&apos;s</option>)}
+            <option value={ASSIGNEE_UNASSIGNED}>No one set (main contact)</option>
           </select>
           <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }} aria-label="Filter by project">
             <option value="">All Projects</option>

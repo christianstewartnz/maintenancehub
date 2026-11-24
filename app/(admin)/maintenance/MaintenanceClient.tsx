@@ -8,10 +8,11 @@ import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getDaysSince, getItemRowClass, formatDate, formatUnitLabel } from '@/lib/utils'
 import CreateMaintenanceModal from './CreateMaintenanceModal'
-import { LIST_SELECT, type MaintenanceItem, type MaintenanceStatus, type Profile } from '@/lib/types'
+import { LIST_SELECT, type MaintenanceItem, type MaintenanceStatus, type Profile, type ProjectStaff, type StaffProfile } from '@/lib/types'
 import { useSessionState } from '@/lib/useSessionState'
 import { statusAfterContractorChange } from '@/lib/contractor-notify'
-import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, matchesAssignee, profileName } from '@/lib/assignees'
+import { ASSIGNEE_ME, ASSIGNEE_UNASSIGNED, fallbackResponsibleLabel, matchesAssignee, profileName } from '@/lib/assignees'
+import { primaryContactByProject, projectStaffProfiles } from '@/lib/staff'
 
 const ASSIGNEE_FILTER_KEY = 'maintenance.assigneeFilter'
 
@@ -22,7 +23,10 @@ interface Props {
   items: MaintenanceItem[]
   projects: { id: string; name: string }[]
   contractors: { id: string; company_name: string }[]
+  /** Every profile, for showing names. */
   users: Profile[]
+  /** Staff on the user's projects: who can be made Responsible, and each project's main contact. */
+  projectStaff: ProjectStaff[]
   trades: { id: string; name: string; project_id: string }[]
   /** Each project's usual contractor per trade, used when a trade is picked. */
   tradeAssignments: { project_id: string; trade_id: string; contractor_id: string }[]
@@ -31,7 +35,7 @@ interface Props {
   renderedAt: number
 }
 
-export default function MaintenanceClient({ items: initial, projects, contractors, users, trades, tradeAssignments, currentUserId, renderedAt }: Props) {
+export default function MaintenanceClient({ items: initial, projects, contractors, users, projectStaff, trades, tradeAssignments, currentUserId, renderedAt }: Props) {
   const [items, setItems] = useState(initial)
   // Take fresh server data whenever it arrives (e.g. after router.refresh())
   const [seenInitial, setSeenInitial] = useState(initial)
@@ -53,6 +57,13 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const [archiving, setArchiving] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+
+  // Everyone on any of my projects, for the per-person filter choices
+  const filterUsers = useMemo(() => {
+    const seen = new Map<string, StaffProfile>()
+    for (const s of projectStaff) if (s.profile?.is_active && !seen.has(s.user_id)) seen.set(s.user_id, s.profile)
+    return [...seen.values()].sort((a, b) => profileName(a).localeCompare(profileName(b)))
+  }, [projectStaff])
 
   // Back/forward shows the list as it was when you left it (Next's router cache), which
   // misses changes made since — e.g. steps added or reordered. A server render we've
@@ -86,9 +97,9 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     try {
       const saved = localStorage.getItem(ASSIGNEE_FILTER_KEY)
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage after hydration
-      if (saved && (saved === ASSIGNEE_ME || saved === ASSIGNEE_UNASSIGNED || users.some(u => u.id === saved))) setFilterAssignee(saved)
+      if (saved && (saved === ASSIGNEE_ME || saved === ASSIGNEE_UNASSIGNED || filterUsers.some(u => u.id === saved))) setFilterAssignee(saved)
     } catch {}
-  }, [users])
+  }, [filterUsers])
 
   function changeAssigneeFilter(value: string) {
     setFilterAssignee(value)
@@ -100,6 +111,21 @@ export default function MaintenanceClient({ items: initial, projects, contractor
 
   const userById = useMemo(() => new Map(users.map(u => [u.id, u])), [users])
   const userLabel = (u: Profile) => `${profileName(u)}${u.id === currentUserId ? ' (me)' : ''}`
+
+  // Responsible: an item with no one set falls to its job's person (steps), else the project's main contact
+  const contactByProject = useMemo(() => primaryContactByProject(projectStaff), [projectStaff])
+  const assignedById = useMemo(() => new Map(items.map(i => [i.id, i.assigned_to ?? null])), [items])
+  const fallbackOf = useCallback((item: MaintenanceItem): { id: string | null; fromJob: boolean } => {
+    const jobAssigned = item.parent_item_id ? assignedById.get(item.parent_item_id) ?? null : null
+    if (jobAssigned) return { id: jobAssigned, fromJob: true }
+    return { id: contactByProject.get(projectIdOf(item)) ?? null, fromJob: false }
+  }, [assignedById, contactByProject])
+  const effectiveOf = useCallback((item: MaintenanceItem) => item.assigned_to || fallbackOf(item).id, [fallbackOf])
+  const fallbackLabel = (fb: { id: string | null; fromJob: boolean }) =>
+    fallbackResponsibleLabel(fb.id ? userById.get(fb.id) ?? { id: fb.id, email: null, full_name: null } : null, fb.fromJob, currentUserId)
+
+  /** Active staff on a project, main contact first — the people an item there can be given to. */
+  const staffFor = useCallback((projectId: string) => projectStaffProfiles(projectStaff, projectId), [projectStaff])
 
   async function assignItems(ids: string[], assignedTo: string | null) {
     if (!ids.length) return
@@ -261,7 +287,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     // A job split into steps has no contractor by design; its steps carry them
     if (filterContractor === 'none') result = result.filter(i => !i.has_steps && !(i.contractor_id ?? (i.contractor as any)?.id))
     else if (filterContractor) result = result.filter(i => (i.contractor_id ?? (i.contractor as any)?.id) === filterContractor)
-    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, filterAssignee, currentUserId))
+    if (filterAssignee) result = result.filter(i => matchesAssignee(i.assigned_to, effectiveOf(i), filterAssignee, currentUserId))
 
     const STATUS_ORDER: Record<MaintenanceStatus, number> = { logged: 0, assigned: 1, in_progress: 2, contractor_complete: 3, complete: 4 }
 
@@ -269,7 +295,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
     else result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return result
-  }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, filterAssignee, currentUserId, sortBy])
+  }, [items, search, filterProject, filterUnit, filterStatus, filterContractor, filterAssignee, currentUserId, sortBy, effectiveOf])
 
   // Only act on selected items that are still visible. Complete items can be selected (to archive them)
   // but "Mark complete" only applies to the ones that aren't complete yet.
@@ -278,6 +304,14 @@ export default function MaintenanceClient({ items: initial, projects, contractor
   const selectedVisible = selectable.filter(i => selected.has(i.id)).map(i => i.id)
   const selectedOpen = selectable.filter(i => selected.has(i.id) && i.status !== 'complete').map(i => i.id)
   const allSelected = selectable.length > 0 && selectedVisible.length === selectable.length
+
+  // Bulk Responsible choices: only people on every selected item's project, so no one is
+  // given an item they can't see
+  const bulkStaff = useMemo(() => {
+    const projectIds = [...new Set(items.filter(i => selected.has(i.id)).map(projectIdOf))]
+    if (!projectIds.length) return []
+    return staffFor(projectIds[0]).filter(u => projectIds.every(pid => staffFor(pid).some(x => x.id === u.id)))
+  }, [items, selected, staffFor])
 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
@@ -601,18 +635,29 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           })()}
         </td>
         <td style={{ whiteSpace: 'nowrap' }}>
-          <select
-            className="assignee-select"
-            value={item.assigned_to ?? ''}
-            onChange={e => assignItems([item.id], e.target.value || null)}
-            disabled={assigning}
-            aria-label={`Responsible for ${item.item_number}`}
-            style={{ color: item.assigned_to ? '#37352f' : '#b0aea8', fontWeight: item.assigned_to === currentUserId ? 500 : undefined }}
-          >
-            <option value="">No one</option>
-            {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
-            {item.assigned_to && !userById.has(item.assigned_to) && <option value={item.assigned_to}>Unknown user</option>}
-          </select>
+          {(() => {
+            const staff = staffFor(projectIdOf(item))
+            const assigned = item.assigned_to
+            const assignedUser = assigned ? userById.get(assigned) : undefined
+            return (
+              <select
+                className="assignee-select"
+                value={assigned ?? ''}
+                onChange={e => assignItems([item.id], e.target.value || null)}
+                disabled={assigning}
+                aria-label={`Responsible for ${item.item_number}`}
+                // Lighter when it's only the fallback (job's person / main contact)
+                style={{ color: assigned ? '#37352f' : '#9b9a97', fontWeight: effectiveOf(item) === currentUserId ? 500 : undefined }}
+              >
+                <option value="">{fallbackLabel(fallbackOf(item))}</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
+                {/* Someone no longer on the project keeps showing until it's changed */}
+                {assigned && !staff.some(u => u.id === assigned) && (
+                  <option value={assigned}>{assignedUser ? `${userLabel(assignedUser)} (not on project)` : 'Unknown user'}</option>
+                )}
+              </select>
+            )
+          })()}
         </td>
         <td><StatusBadge status={item.status} /></td>
         <td style={{ fontSize: 13, color: isComplete ? '#1d6a38' : days >= 14 ? '#e03c3c' : days >= 7 ? '#9a6700' : '#787774', whiteSpace: 'nowrap' }}>
@@ -679,10 +724,10 @@ export default function MaintenanceClient({ items: initial, projects, contractor
           onChange={e => changeAssigneeFilter(e.target.value)}
           aria-label="Filter by who's responsible"
         >
-          <option value="">Everyone&apos;s items</option>
-          <option value={ASSIGNEE_ME}>Mine + no one responsible</option>
-          {users.map(u => <option key={u.id} value={u.id}>Only {userLabel(u)}</option>)}
-          <option value={ASSIGNEE_UNASSIGNED}>Only no one responsible</option>
+          <option value="">All items</option>
+          <option value={ASSIGNEE_ME}>Mine</option>
+          {filterUsers.filter(u => u.id !== currentUserId).map(u => <option key={u.id} value={u.id}>{profileName(u)}&apos;s</option>)}
+          <option value={ASSIGNEE_UNASSIGNED}>No one set (main contact)</option>
         </select>
         <select className="input" style={{ flex: '0 0 auto', width: 'auto' }} value={filterProject} onChange={e => { setFilterProject(e.target.value); setFilterUnit('') }}>
           <option value="">All Projects</option>
@@ -753,8 +798,8 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             onChange={e => setBulkAssignee(e.target.value)}
           >
             <option value="">Responsible…</option>
-            {users.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
-            <option value={ASSIGNEE_UNASSIGNED}>No one (everyone)</option>
+            {bulkStaff.map(u => <option key={u.id} value={u.id}>{userLabel(u)}</option>)}
+            <option value={ASSIGNEE_UNASSIGNED}>Clear (back to main contact)</option>
           </select>
           {bulkAssignee && (
             <>
@@ -802,6 +847,12 @@ export default function MaintenanceClient({ items: initial, projects, contractor
             <>
               <p style={{ fontSize: 15, fontWeight: 500 }}>No items match your filters</p>
               <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={clearFilters}>Clear filters</button>
+            </>
+          ) : projects.length === 0 ? (
+            // A staff user only sees their projects' items (RLS)
+            <>
+              <p style={{ fontSize: 15, fontWeight: 500 }}>You haven&apos;t been assigned to any projects yet</p>
+              <p>Ask an admin to add you to a project and its items will show here.</p>
             </>
           ) : (
             <>
@@ -855,7 +906,7 @@ export default function MaintenanceClient({ items: initial, projects, contractor
         <CreateMaintenanceModal
           projects={projects}
           contractors={contractors}
-          users={users}
+          projectStaff={projectStaff}
           currentUserId={currentUserId}
           onClose={() => setShowCreate(false)}
           onCreated={handleCreated}
@@ -863,6 +914,11 @@ export default function MaintenanceClient({ items: initial, projects, contractor
       )}
     </div>
   )
+}
+
+function projectIdOf(i: MaintenanceItem): string {
+  const unit = i.unit as { project_id?: string; project?: { id: string } | null } | null | undefined
+  return unit?.project?.id ?? unit?.project_id ?? ''
 }
 
 const stepEditLabel: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: '#787774', marginBottom: 4 }

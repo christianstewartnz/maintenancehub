@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { refuseIfNotVisible } from '../../_lib/visible'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -26,6 +27,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (!item || item.contractor_id !== contractor.id) {
     return NextResponse.json({ error: 'Not authorised' }, { status: 403 })
   }
+  // Only items shown on their portal (released, open, not hidden).
+  const refused = await refuseIfNotVisible(supabase, token, item_id)
+  if (refused) return refused
 
   const { error } = await supabase
     .from('maintenance_items')

@@ -9,10 +9,16 @@ import type { Project } from '@/lib/types'
 
 interface Props {
   projects: (Project & { units: { count: number }[] })[]
+  /** project_id → main contact's name */
+  mainContacts: Record<string, string>
+  /** Only admins create projects (RLS also enforces it) */
+  isAdmin: boolean
+  currentUserId: string
 }
 
-export default function ProjectsClient({ projects: initial }: Props) {
+export default function ProjectsClient({ projects: initial, mainContacts: initialContacts, isAdmin, currentUserId }: Props) {
   const [projects, setProjects] = useState(initial)
+  const [mainContacts, setMainContacts] = useState(initialContacts)
   const [showModal, setShowModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [showArchived, setShowArchived] = useState(false)
@@ -31,7 +37,14 @@ export default function ProjectsClient({ projects: initial }: Props) {
       .select()
       .single()
 
+    if (error) alert(`Couldn't create project: ${error.message}`)
     if (!error && data) {
+      // The admin who creates a project starts as its main contact (change it on the project's Staff card)
+      const { error: staffErr } = await supabase
+        .from('project_staff')
+        .insert({ project_id: data.id, user_id: currentUserId, is_primary: true })
+      if (staffErr) alert(`Project created, but couldn't make you its main contact: ${staffErr.message}`)
+      else setMainContacts(prev => ({ ...prev, [data.id]: 'You' }))
       setProjects(prev => [...prev, { ...data, units: [{ count: 0 }] }])
       setShowModal(false)
       setForm({ name: '', address: '', description: '', development_company: '' })
@@ -71,24 +84,34 @@ export default function ProjectsClient({ projects: initial }: Props) {
 
   return (
     <div className="page-content" style={{ padding: '24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} /> New Project
-        </button>
-      </div>
-
-      {activeProjects.length === 0 && archivedProjects.length === 0 ? (
-        <div className="empty-state">
-          <Building2 size={40} style={{ marginBottom: 12, color: '#d0d0d0' }} />
-          <p style={{ fontSize: 16, fontWeight: 500 }}>No projects yet</p>
-          <p style={{ fontSize: 14 }}>Create your first project to get started.</p>
-          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setShowModal(true)}>
-            <Plus size={16} /> Create Project
+      {isAdmin && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} /> New Project
           </button>
         </div>
+      )}
+
+      {activeProjects.length === 0 && archivedProjects.length === 0 ? (
+        isAdmin ? (
+          <div className="empty-state">
+            <Building2 size={40} style={{ marginBottom: 12, color: '#d0d0d0' }} />
+            <p style={{ fontSize: 16, fontWeight: 500 }}>No projects yet</p>
+            <p style={{ fontSize: 14 }}>Create your first project to get started.</p>
+            <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setShowModal(true)}>
+              <Plus size={16} /> Create Project
+            </button>
+          </div>
+        ) : (
+          <div className="empty-state">
+            <Building2 size={40} style={{ marginBottom: 12, color: '#d0d0d0' }} />
+            <p style={{ fontSize: 16, fontWeight: 500 }}>You haven&apos;t been assigned to any projects yet</p>
+            <p style={{ fontSize: 14 }}>Ask an admin to add you to a project.</p>
+          </div>
+        )
       ) : (
         <>
-          <ProjectList projects={activeProjects} onEdit={openEdit} />
+          <ProjectList projects={activeProjects} mainContacts={mainContacts} onEdit={openEdit} />
           {archivedProjects.length > 0 && (
             <div style={{ marginTop: 24 }}>
               <button
@@ -98,14 +121,14 @@ export default function ProjectsClient({ projects: initial }: Props) {
               >
                 {showArchived ? `Hide archived (${archivedProjects.length})` : `Show archived (${archivedProjects.length})`}
               </button>
-              {showArchived && <ProjectList projects={archivedProjects} onEdit={openEdit} style={{ marginTop: 12, opacity: 0.6 }} />}
+              {showArchived && <ProjectList projects={archivedProjects} mainContacts={mainContacts} onEdit={openEdit} style={{ marginTop: 12, opacity: 0.6 }} />}
             </div>
           )}
         </>
       )}
 
       {/* Create modal */}
-      {showModal && (
+      {showModal && isAdmin && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
@@ -183,7 +206,7 @@ export default function ProjectsClient({ projects: initial }: Props) {
   )
 }
 
-function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p: any, e: React.MouseEvent) => void; style?: React.CSSProperties }) {
+function ProjectList({ projects, mainContacts, onEdit, style }: { projects: Props['projects']; mainContacts: Record<string, string>; onEdit: (p: Project, e: React.MouseEvent) => void; style?: React.CSSProperties }) {
   return (
     <div style={style}>
       <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
@@ -215,6 +238,9 @@ function ProjectList({ projects, onEdit, style }: { projects: any[]; onEdit: (p:
               {p.address && <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>{p.address}</p>}
               <div style={{ display: 'flex', gap: 16, marginTop: 'auto', paddingTop: 12, fontSize: 13, color: '#787774' }}>
                 <span>{p.units?.[0]?.count ?? 0} units</span>
+                <span style={mainContacts[p.id] ? undefined : { color: '#b0aea8' }}>
+                  Main contact: {mainContacts[p.id] ?? 'none'}
+                </span>
               </div>
             </div>
           </Link>

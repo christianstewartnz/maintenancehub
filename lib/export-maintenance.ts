@@ -32,6 +32,9 @@ export interface ExportItem {
   trade: { name: string } | null
   contractor: { company_name: string; contact_name: string | null } | null
   assignee: { full_name: string | null; email: string | null } | null
+  /** Who it falls to when no Responsible is set: the job's person, or the project's main contact. */
+  fallback?: { full_name: string | null; email: string | null } | null
+  fallback_from?: 'job' | 'contact'
 }
 
 // ─── Styling (matches the hand-built "Open Maintenance" workbook) ──────────
@@ -255,7 +258,7 @@ function buildUnitSheet(wb: ExcelJS.Workbook, group: UnitGroup, opts: { withBack
       item.trade?.name ?? '—',
       contractorLabel(item.contractor),
       STATUS_LABEL[item.status] ?? item.status,
-      item.assignee ? profileName(item.assignee) : 'No one',
+      item.assignee ? profileName(item.assignee) : item.fallback ? `${profileName(item.fallback)} (${item.fallback_from === 'job' ? 'from job' : 'main contact'})` : 'No one',
       formatNzDate(item.created_at),
       notes,
       source,

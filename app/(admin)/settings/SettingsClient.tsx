@@ -11,15 +11,18 @@ interface Props {
   /** SMTP mailbox notifications are sent from; null when SMTP isn't set up. */
   senderEmail: string | null
   projects: Project[]
+  /** Admins can get alerts for every project and use the email test tools (admin-only APIs). */
+  isAdmin: boolean
 }
 
-export default function SettingsClient({ prefs: initial, userId, loginEmail, senderEmail, projects }: Props) {
+export default function SettingsClient({ prefs: initial, userId, loginEmail, senderEmail, projects, isAdmin }: Props) {
   const [notifyEmail, setNotifyEmail] = useState(initial?.notify_email ?? '')
   const [maintenanceDue, setMaintenanceDue] = useState(initial?.maintenance_due_email ?? true)
   const [error, setError] = useState<string | null>(null)
   const [testState, setTestState] = useState<{ busy: boolean; msg: string | null; ok: boolean }>({ busy: false, msg: null, ok: true })
   const [contractorComplete, setContractorComplete] = useState(initial?.contractor_complete_email ?? true)
   const [contractorComment, setContractorComment] = useState(initial?.contractor_comment_email ?? true)
+  const [alertsAllProjects, setAlertsAllProjects] = useState(initial?.alerts_all_projects ?? false)
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'none'>(initial?.report_frequency ?? 'weekly')
   const [scope, setScope] = useState<'all_projects' | 'per_project'>(initial?.report_scope ?? 'all_projects')
   const [selectedProjects, setSelectedProjects] = useState<string[]>(initial?.report_projects ?? [])
@@ -49,6 +52,8 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
       report_scope: scope,
       report_projects: scope === 'per_project' ? selectedProjects : [],
       updated_at: new Date().toISOString(),
+      // Only admins can choose this; leaving it out for staff keeps the stored value as is.
+      ...(isAdmin ? { alerts_all_projects: alertsAllProjects } : {}),
     }
 
     // One row per user (unique on user_id), so upsert covers first-time saves too.
@@ -109,6 +114,7 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           </p>
         </div>
 
+        {isAdmin && <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-secondary" onClick={sendTest} disabled={testState.busy || !senderEmail}>
             {testState.busy ? 'Sending…' : 'Send test email'}
@@ -118,13 +124,14 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           )}
         </div>
         <p style={{ margin: '6px 0 0', fontSize: 12, color: '#787774' }}>Save first if you have changed the address.</p>
+        </>}
       </div>
 
       {/* Contractor notifications */}
       <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, padding: '20px 24px', marginBottom: 16 }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600 }}>Contractor Notifications</h3>
         <p style={{ color: '#787774', fontSize: 14, marginTop: 0, marginBottom: 16 }}>
-          Email alerts when contractors take action on the portal.
+          Email alerts when contractors take action on the portal, for items you&apos;re responsible for (including items with no Responsible person on projects where you&apos;re the main contact).
         </p>
 
         <label style={checkboxRow}>
@@ -137,7 +144,7 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           <div>
             <span style={{ fontSize: 14, fontWeight: 500 }}>Work ready for inspection</span>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>
-              Email me when a contractor marks an item as complete.
+              Email me when a contractor marks one of my items as complete.
             </p>
           </div>
         </label>
@@ -152,10 +159,27 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           <div>
             <span style={{ fontSize: 14, fontWeight: 500 }}>New contractor comment</span>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>
-              Email me when a contractor leaves a comment.
+              Email me when a contractor comments on one of my items.
             </p>
           </div>
         </label>
+
+        {isAdmin && (
+          <label style={{ ...checkboxRow, marginTop: 14 }}>
+            <input
+              type="checkbox"
+              checked={alertsAllProjects}
+              onChange={e => setAlertsAllProjects(e.target.checked)}
+              style={{ marginRight: 10, accentColor: '#2383e2' }}
+            />
+            <div>
+              <span style={{ fontSize: 14, fontWeight: 500 }}>Alerts for all projects</span>
+              <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>
+                Admin only: get the two alerts above for every item on every project, not just yours.
+              </p>
+            </div>
+          </label>
+        )}
 
         <label style={{ ...checkboxRow, marginTop: 14 }}>
           <input
@@ -167,7 +191,7 @@ export default function SettingsClient({ prefs: initial, userId, loginEmail, sen
           <div>
             <span style={{ fontSize: 14, fontWeight: 500 }}>90-day maintenance due</span>
             <p style={{ margin: '2px 0 0', fontSize: 13, color: '#787774' }}>
-              Email me weekly (Monday morning) when units have their 90-day maintenance form due within 28 days or up to 7 days overdue — each unit has a link to draft the owner reminder in Outlook.
+              Email me weekly (Monday morning) when units on my projects have their 90-day maintenance form due within 28 days or up to 7 days overdue — each unit has a link to draft the owner reminder in Outlook.
             </p>
           </div>
         </label>

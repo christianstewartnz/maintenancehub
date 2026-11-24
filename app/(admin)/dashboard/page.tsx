@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import PageHeader from '@/components/layout/PageHeader'
 import DashboardClient from './DashboardClient'
+import { getSession, isAdmin } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,7 @@ export default async function DashboardPage() {
     contractor:contractors(id, company_name)
   `
 
-  const [projectsRes, openItemsRes, scheduledItemsRes] = await Promise.all([
+  const [projectsRes, openItemsRes, scheduledItemsRes, session] = await Promise.all([
     supabase.from('projects').select('*').eq('status', 'active').order('name'),
     supabase
       .from('maintenance_items')
@@ -30,19 +31,21 @@ export default async function DashboardPage() {
       .eq('has_steps', false)
       .is('archived_at', null)
       .order('scheduled_date', { ascending: true }),
+    getSession(),
   ])
 
   return (
     <div>
       <PageHeader
         title="Dashboard"
-        description="Open maintenance items across all active projects"
+        description={isAdmin(session?.profile) ? 'Open maintenance items across all active projects' : 'Open maintenance items across your projects'}
       />
       <DashboardClient
         projects={projectsRes.data ?? []}
         items={(openItemsRes.data ?? []) as any}
         scheduledItems={(scheduledItemsRes.data ?? []) as any}
         loadedAt={Date.now()}
+        isAdmin={isAdmin(session?.profile)}
       />
     </div>
   )

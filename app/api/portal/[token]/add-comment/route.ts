@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCommentEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
-import { getRecipients } from '@/lib/notify-recipients'
+import { getItemAlertRecipients } from '@/lib/notify-recipients'
+import { refuseIfNotVisible } from '../../_lib/visible'
 
 export async function POST(
   req: Request,
@@ -15,6 +16,9 @@ export async function POST(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+
+  const refused = await refuseIfNotVisible(supabase, token, item_id)
+  if (refused) return refused
 
   const { data, error } = await supabase.rpc('portal_add_comment', {
     p_token: token,
@@ -60,8 +64,8 @@ async function sendCommentNotification(
 
   if (!item) return
 
-  // Every user who has "New contractor comment" switched on.
-  const recipients = await getRecipients(serviceSupabase, 'contractor_comment_email')
+  // The item's responsible person (+ admins following all projects), if they have "New contractor comment" on.
+  const recipients = await getItemAlertRecipients(serviceSupabase, 'contractor_comment_email', itemId)
   if (!recipients.length) return
 
   const unit = item.unit as any

@@ -75,6 +75,39 @@ function AccessNote({ unit }: { unit: any }) {
   )
 }
 
+// ---------- Stratum contact ----------
+/** The item's responsible staff member (get_portal_items_v2), or null. */
+type Contact = { name: string | null; email: string | null; phone: string | null } | null
+
+function contactKey(c: Contact): string {
+  return c ? `${c.name ?? ''}|${c.email ?? ''}|${c.phone ?? ''}` : ''
+}
+
+/** "Your contact: name · phone · email" with tap-to-call / mail links. */
+function ContactNote({ contact, style }: { contact: Contact; style?: React.CSSProperties }) {
+  if (!contact || (!contact.name && !contact.email && !contact.phone)) return null
+  const stop = (e: React.MouseEvent) => e.stopPropagation()
+  const link = { color: '#2f6fcf', textDecoration: 'none', overflowWrap: 'anywhere' as const }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, fontSize: 13, color: '#37352f', ...style }}>
+      <User size={12} style={{ color: '#a0a09e', flexShrink: 0 }} />
+      <span>Your contact: <strong>{contact.name ?? contact.email}</strong></span>
+      {contact.phone && (
+        <>
+          <Phone size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
+          <a href={`tel:${contact.phone.replace(/[^+\d]/g, '')}`} onClick={stop} style={link}>{contact.phone}</a>
+        </>
+      )}
+      {contact.email && (
+        <>
+          <Mail size={12} style={{ color: '#a0a09e', flexShrink: 0, marginLeft: 4 }} />
+          <a href={`mailto:${contact.email}`} onClick={stop} style={link}>{contact.email}</a>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ---------- Item accordion ----------
 interface ItemProps {
   item: any
@@ -90,13 +123,15 @@ interface ItemProps {
   isDateSubmitting: boolean
   onUploadPhoto: (blob: Blob, fileName: string, type: PhotoType) => Promise<PhotoWithUrl | string>
   onPhotosChange: (photos: PhotoWithUrl[]) => void
+  /** Show the item's contact here (false when the whole project has one contact, shown on the project). */
+  showContact: boolean
 }
 
 function ItemRow({
   item, isExpanded, onToggle,
   comment, onComment, onSubmitComment,
   onUpdateStatus, onSetScheduledDate, onUploadPhoto, onPhotosChange,
-  isStatusSubmitting, isCommentSubmitting, isDateSubmitting,
+  isStatusSubmitting, isCommentSubmitting, isDateSubmitting, showContact,
 }: ItemProps) {
   const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
   const isDone = item.status === 'contractor_complete' || item.status === 'complete'
@@ -164,6 +199,8 @@ function ItemRow({
               </span>
             </div>
           )}
+
+          {showContact && <ContactNote contact={item.responsible ?? null} style={{ marginBottom: 14 }} />}
 
           {item.inherits_description && item.description && (
             <div style={{ fontSize: 12, color: '#9b9a97', marginBottom: 2 }}>Instructions for the whole job:</div>
@@ -385,13 +422,18 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
       if (!hasAfter && !confirm(`You haven’t added a completion photo for ${ref} yet. Mark complete without one?`)) return
     }
     setSubmitting(prev => ({ ...prev, [itemId]: true }))
-    await fetch(`/api/portal/${token}/update-status`, {
+    const res = await fetch(`/api/portal/${token}/update-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item_id: itemId, status }),
     })
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
     setSubmitting(prev => ({ ...prev, [itemId]: false }))
+    if (!res.ok) {
+      // e.g. the item was reassigned or hidden since the page loaded
+      alert('This item can’t be updated any more. Please refresh the page.')
+      return
+    }
+    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status } : i))
   }
 
   async function setScheduledDate(itemId: string, date: string) {
@@ -481,6 +523,9 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
               grouped.map(({ project, units }) => {
                 const projectOutstanding = units.reduce((s, u) => s + u.summary.outstanding, 0)
                 const projectDone = units.reduce((s, u) => s + u.summary.done, 0)
+                // One contact for every item in the project: show it once on the project, not per item.
+                const contactKeys = new Set(units.flatMap(u => u.items.map((i: { responsible?: Contact }) => contactKey(i.responsible ?? null))))
+                const projectContact: Contact = contactKeys.size === 1 && !contactKeys.has("") ? units[0].items[0].responsible : null
                 return (
                   <div key={project.id} style={{ marginBottom: 32 }}>
                     {/* Project header */}
@@ -489,6 +534,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                       {(project as any).development_company && (
                         <div style={{ fontSize: 13, color: '#787774', marginTop: 2 }}>{(project as any).development_company}</div>
                       )}
+                      <ContactNote contact={projectContact} style={{ marginTop: 4 }} />
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', fontSize: 12, marginTop: 2 }}>
                         {projectOutstanding > 0 && (
                           <span className="unit-count-outstanding">{projectOutstanding} outstanding</span>
@@ -605,6 +651,7 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     isStatusSubmitting={!!submitting[item.id]}
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
                                     isDateSubmitting={!!submitting[`date-${item.id}`]}
+                                    showContact={!projectContact}
                                     onUploadPhoto={(blob, name) => uploadPhoto(item.id, blob, name)}
                                     onPhotosChange={photos => setItems(prev => prev.map(i => i.id === item.id ? { ...i, attachments: photos } : i))}
                                   />

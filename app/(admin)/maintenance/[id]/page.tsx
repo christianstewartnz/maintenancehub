@@ -4,6 +4,7 @@ import PageHeader from '@/components/layout/PageHeader'
 import ItemDetailClient from './ItemDetailClient'
 import { withSignedUrls } from '@/lib/photos'
 import { STEP_SELECT } from '@/lib/types'
+import { fetchProjectStaff } from '@/lib/staff'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,13 +38,15 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   // A job lists its own steps; a step shows its job and the other steps on it
   const parentId = itemRes.data.parent_item_id ?? null
   const familyId = parentId ?? itemRes.data.id
-  const [tradesRes, assignmentsRes, stepsRes, parentRes] = await Promise.all([
+  const [tradesRes, assignmentsRes, stepsRes, parentRes, projectStaff] = await Promise.all([
     projectId ? supabase.from('trades').select('*').eq('project_id', projectId).order('name') : Promise.resolve({ data: [] }),
     projectId ? supabase.from('project_trade_assignments').select('trade_id, contractor_id').eq('project_id', projectId) : Promise.resolve({ data: [] }),
     supabase.from('maintenance_items').select(STEP_SELECT).eq('parent_item_id', familyId).order('step_order'),
     parentId
-      ? supabase.from('maintenance_items').select('id, item_number, title, description, status, archived_at').eq('id', parentId).single()
+      ? supabase.from('maintenance_items').select('id, item_number, title, description, status, archived_at, assigned_to').eq('id', parentId).single()
       : Promise.resolve({ data: null }),
+    // The project's staff: Responsible choices and the main contact it falls back to
+    projectId ? fetchProjectStaff(supabase, [projectId]) : Promise.resolve([]),
   ])
 
   return (
@@ -70,6 +73,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         steps={(stepsRes.data ?? []) as any}
         parent={parentRes.data as any}
         users={usersRes.data ?? []}
+        projectStaff={projectStaff}
         currentUserId={user?.id ?? ''}
       />
     </div>

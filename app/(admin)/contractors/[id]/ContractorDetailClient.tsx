@@ -16,17 +16,27 @@ interface Props {
   contacts: ContractorContact[]
   assignments: any[]
   items: any[]
+  /** The signed-in user's own pending items (they only notify about those). */
   pendingItems: PendingNotifyItem[]
+  /** Admin only: pending items for this contractor that belong to other staff. */
+  otherPendingCount?: number
   lastNotifiedAt: string | null
+  /** Archiving is admin-only (the DB refuses it for staff too). */
+  isAdmin?: boolean
+  userId?: string
 }
 
-export default function ContractorDetailClient({ contractor: initial, contacts, assignments, items: initialItems, pendingItems: initialPending, lastNotifiedAt: initialLast }: Props) {
+/** Not yet emailed to the contractor (whoever it belongs to). */
+function isUnsent(item: { contractor_notified_at: string | null; portal_hidden: boolean; status: string }): boolean {
+  return !item.contractor_notified_at && !item.portal_hidden && !(NOT_PENDING_STATUSES as readonly string[]).includes(item.status)
+}
+
+export default function ContractorDetailClient({ contractor: initial, contacts, assignments, items: initialItems, pendingItems: initialPending, otherPendingCount = 0, lastNotifiedAt: initialLast, isAdmin = false, userId }: Props) {
   const [contractor, setContractor] = useState(initial)
   const [pending, setPending] = useState(initialPending)
   const [lastNotifiedAt, setLastNotifiedAt] = useState(initialLast)
   const [showNotify, setShowNotify] = useState(false)
   const [flash, setFlash] = useState('')
-  const pendingIds = new Set(pending.map(p => p.id))
   const [items, setItems] = useState(initialItems)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkSaving, setBulkSaving] = useState(false)
@@ -135,7 +145,7 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
     setPending(prev => {
       if (hidden) return prev.filter(p => !ids.includes(p.id))
       const have = new Set(prev.map(p => p.id))
-      const back = targets.filter(i => !i.contractor_notified_at && !(NOT_PENDING_STATUSES as readonly string[]).includes(i.status) && !have.has(i.id))
+      const back = targets.filter(i => !i.contractor_notified_at && !(NOT_PENDING_STATUSES as readonly string[]).includes(i.status) && !have.has(i.id) && i.responsible_id === userId)
       return [...prev, ...back]
     })
     setSelected(new Set())
@@ -235,7 +245,7 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
                                       <EyeOff size={10} /> Hidden
                                     </span>
                                   )}
-                                  {pendingIds.has(item.id) && (
+                                  {isUnsent(item) && (
                                     <span title="Not yet emailed to this contractor" style={{ marginLeft: 8, background: '#e7f1fb', color: '#1f6fbf', borderRadius: 10, padding: '1px 7px', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>Not emailed</span>
                                   )}
                                 </td>
@@ -295,12 +305,21 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
           <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>New Items</h4>
           <p style={{ fontSize: 13, color: '#37352f', margin: '0 0 10px' }}>
             {pending.length
-              ? <><strong>{pending.length}</strong> item{pending.length !== 1 ? 's' : ''} assigned since their last email.</>
-              : 'Contractor is up to date.'}
+              ? <><strong>{pending.length}</strong> of your item{pending.length !== 1 ? 's' : ''} assigned since their last email.</>
+              : 'Up to date with your items.'}
           </p>
-          {pending.length > 0 && (
-            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 13 }} onClick={() => setShowNotify(true)}>
-              <Mail size={14} /> Notify ({pending.length} new)
+          {otherPendingCount > 0 && (
+            <p style={{ fontSize: 12, color: '#787774', margin: '0 0 10px' }}>
+              {otherPendingCount} more belong{otherPendingCount === 1 ? 's' : ''} to other staff.
+            </p>
+          )}
+          {(pending.length > 0 || otherPendingCount > 0) && (
+            <button
+              className={`btn ${pending.length ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
+              onClick={() => setShowNotify(true)}
+            >
+              <Mail size={14} /> {pending.length ? `Notify (${pending.length} new)` : 'Notify on behalf of others'}
             </button>
           )}
           {hiddenCount > 0 && (
@@ -392,19 +411,22 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
 
         <div style={{ border: `1px solid ${contractor.is_active ? '#e9e9e7' : '#f0d4d4'}`, borderRadius: 8, padding: '14px 16px', background: contractor.is_active ? 'white' : '#fff8f8' }}>
           <h4 style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</h4>
-          <p style={{ fontSize: 13, color: '#787774', margin: '0 0 10px' }}>
+          <p style={{ fontSize: 13, color: '#787774', margin: isAdmin ? '0 0 10px' : 0 }}>
             {contractor.is_active ? 'Active — visible across the app.' : 'Archived — hidden from new items.'}
           </p>
-          <button
-            className={`btn ${contractor.is_active ? 'btn-secondary' : 'btn-primary'}`}
-            style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
-            onClick={toggleArchive}
-            disabled={archiving}
-          >
-            {contractor.is_active
-              ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive Contractor'}</>
-              : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore Contractor'}</>}
-          </button>
+          {/* Contractors are shared by all staff, so only an admin archives/restores them. */}
+          {isAdmin && (
+            <button
+              className={`btn ${contractor.is_active ? 'btn-secondary' : 'btn-primary'}`}
+              style={{ width: '100%', justifyContent: 'center', fontSize: 13 }}
+              onClick={toggleArchive}
+              disabled={archiving}
+            >
+              {contractor.is_active
+                ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive Contractor'}</>
+                : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore Contractor'}</>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -414,8 +436,10 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
           items={pending}
           onClose={() => setShowNotify(false)}
           onDone={(ids, mode) => {
+            const now = new Date().toISOString()
             setPending(prev => prev.filter(p => !ids.includes(p.id)))
-            setLastNotifiedAt(new Date().toISOString())
+            setItems(prev => prev.map(i => (ids.includes(i.id) ? { ...i, contractor_notified_at: now } : i)))
+            setLastNotifiedAt(now)
             setShowNotify(false)
             setFlash(mode === 'email' ? `Emailed ${contractor.email} about ${ids.length} item${ids.length !== 1 ? 's' : ''}.` : `Marked ${ids.length} item${ids.length !== 1 ? 's' : ''} as told.`)
             router.refresh()

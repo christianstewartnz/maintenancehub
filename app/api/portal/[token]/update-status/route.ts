@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorCompleteEmail } from '@/lib/email-templates'
 import { formatUnitLabel } from '@/lib/utils'
-import { getRecipients } from '@/lib/notify-recipients'
+import { getItemAlertRecipients } from '@/lib/notify-recipients'
+import { refuseIfNotVisible } from '../../_lib/visible'
 
 export async function POST(
   req: Request,
@@ -16,6 +17,9 @@ export async function POST(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+
+  const refused = await refuseIfNotVisible(supabase, token, item_id)
+  if (refused) return refused
 
   const { data, error } = await supabase.rpc('portal_update_status', {
     p_token: token,
@@ -51,8 +55,8 @@ async function sendContractorCompleteNotification(token: string, itemId: string)
 
   if (!item) return
 
-  // Every user who has "Work ready for inspection" switched on.
-  const recipients = await getRecipients(serviceSupabase, 'contractor_complete_email')
+  // The item's responsible person (+ admins following all projects), if they have "Work ready for inspection" on.
+  const recipients = await getItemAlertRecipients(serviceSupabase, 'contractor_complete_email', itemId)
   if (!recipients.length) return
 
   const unit = item.unit as any

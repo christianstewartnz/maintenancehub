@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, Sparkles, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import type { MaintenanceItem, Profile } from '@/lib/types'
+import type { MaintenanceItem, ProjectStaff } from '@/lib/types'
 import { profileName } from '@/lib/assignees'
+import { primaryContactId, projectStaffProfiles } from '@/lib/staff'
 import { formatUnitLabel } from '@/lib/utils'
 
 interface LineItem {
@@ -19,13 +20,14 @@ const emptyLine = (): LineItem => ({ trade_id: '', contractor_id: '', title: '',
 interface Props {
   projects: { id: string; name: string }[]
   contractors: { id: string; company_name: string }[]
-  users: Profile[]
+  /** Staff on the user's projects: the Responsible choices and each project's main contact. */
+  projectStaff: ProjectStaff[]
   currentUserId: string
   onClose: () => void
   onCreated: (item: MaintenanceItem) => void
 }
 
-export default function CreateMaintenanceModal({ projects, contractors, users, currentUserId, onClose, onCreated }: Props) {
+export default function CreateMaintenanceModal({ projects, contractors, projectStaff, currentUserId, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual')
   const [projectId, setProjectId] = useState('')
   const [unitId, setUnitId] = useState('')
@@ -45,6 +47,13 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
   const [aiTradeIds, setAiTradeIds] = useState<string[]>([])
   const [aiContractorIds, setAiContractorIds] = useState<string[]>([])
   const supabase = createClient()
+  const projectPeople = projectId ? projectStaffProfiles(projectStaff, projectId) : []
+
+  // Picking a project makes its main contact Responsible by default
+  function changeProject(id: string) {
+    setProjectId(id)
+    setAssignedTo(id ? primaryContactId(projectStaff.filter(s => s.project_id === id)) ?? '' : '')
+  }
 
   useEffect(() => {
     if (!projectId) { setUnits([]); setTrades([]); setTradeContractor({}); setUnitId(''); setAiResults([]); return }
@@ -247,7 +256,7 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                     className="input"
                     required
                     value={projectId}
-                    onChange={e => setProjectId(e.target.value)}
+                    onChange={e => changeProject(e.target.value)}
                   >
                     <option value="">Select a project…</option>
                     {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -255,10 +264,12 @@ export default function CreateMaintenanceModal({ projects, contractors, users, c
                 </div>
                 <div style={{ flex: '1 1 200px', maxWidth: 260 }}>
                   <label style={sectionLabel}>Responsible</label>
-                  <select className="input" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
-                    <option value="">No one (everyone)</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{profileName(u)}{u.id === currentUserId ? ' (me)' : ''}</option>
+                  <select className="input" value={assignedTo} onChange={e => setAssignedTo(e.target.value)} disabled={!projectId}>
+                    <option value="">{projectId ? 'Main contact (not set)' : 'Select a project first'}</option>
+                    {projectPeople.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {profileName(u)}{u.id === currentUserId ? ' (me)' : ''}{projectStaff.some(s => s.project_id === projectId && s.user_id === u.id && s.is_primary) ? ' — main contact' : ''}
+                      </option>
                     ))}
                   </select>
                 </div>

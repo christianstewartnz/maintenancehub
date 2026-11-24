@@ -11,11 +11,17 @@ import { COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
 
 export type PendingRow = PendingNotifyItem & { contractor_id: string }
 
-interface Props { contractors: Contractor[]; pendingItems: PendingRow[] }
+interface Props {
+  contractors: Contractor[]
+  /** The signed-in user's own pending items (they only notify about those). */
+  pendingItems: PendingRow[]
+  /** Admin only: contractor id → pending items belonging to other staff. */
+  otherPendingCounts?: Record<string, number>
+}
 
 const emptyForm = { company_name: '', contact_name: '', email: '', phone: '', notes: '' }
 
-export default function ContractorsClient({ contractors: initial, pendingItems: initialPending }: Props) {
+export default function ContractorsClient({ contractors: initial, pendingItems: initialPending, otherPendingCounts = {} }: Props) {
   const [contractors, setContractors] = useState(initial)
   const [pending, setPending] = useState(initialPending)
   const [notifying, setNotifying] = useState<Contractor | null>(null)
@@ -148,6 +154,7 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
             onCopy={copyPortalLink}
             onEdit={openEdit}
             pendingCounts={pendingCounts}
+            otherCounts={otherPendingCounts}
             onNotify={setNotifying}
             selected={selected}
             canSelect={canSelect}
@@ -173,6 +180,7 @@ export default function ContractorsClient({ contractors: initial, pendingItems: 
                     onCopy={copyPortalLink}
                     onEdit={openEdit}
                     pendingCounts={pendingCounts}
+                    otherCounts={otherPendingCounts}
                     onNotify={setNotifying}
                     selected={selected}
                     canSelect={canSelect}
@@ -370,12 +378,13 @@ function NotifyAllModal({ contractors, pendingFor, onClose, onSent }: {
   )
 }
 
-function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts, onNotify, selected, canSelect, onToggle, onToggleMany, dimmed }: {
+function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts, otherCounts, onNotify, selected, canSelect, onToggle, onToggleMany, dimmed }: {
   contractors: Contractor[]
   copiedId: string | null
   onCopy: (c: Contractor) => void
   onEdit: (c: Contractor) => void
   pendingCounts: Record<string, number>
+  otherCounts: Record<string, number>
   onNotify: (c: Contractor) => void
   selected: Set<string>
   canSelect: (c: Contractor) => boolean
@@ -431,12 +440,23 @@ function ContractorTable({ contractors, copiedId, onCopy, onEdit, pendingCounts,
                   className="btn btn-ghost"
                   style={{ padding: '3px 8px', fontSize: 12, color: '#2383e2', gap: 6 }}
                   onClick={() => onNotify(c)}
-                  title="Email this contractor about their new items"
+                  title="Email this contractor about your new items for them"
                 >
                   <span style={{ background: '#e7f1fb', color: '#1f6fbf', borderRadius: 10, padding: '1px 8px', fontWeight: 600, fontSize: 11 }}>
                     {pendingCounts[c.id]} new
                   </span>
                   <Mail size={13} /> Notify
+                  {otherCounts[c.id] ? <span style={{ color: '#9b9a97', fontSize: 11 }}>+{otherCounts[c.id]} others&apos;</span> : null}
+                </button>
+              ) : otherCounts[c.id] ? (
+                // Admin: only other staff's items are waiting. Notify opens with the option to send on their behalf.
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: '3px 8px', fontSize: 12, color: '#9b9a97', gap: 6 }}
+                  onClick={() => onNotify(c)}
+                  title="New items belonging to other staff"
+                >
+                  {otherCounts[c.id]} new (others&apos;)
                 </button>
               ) : (
                 <span style={{ color: '#c4c4c0', fontSize: 13 }}>—</span>

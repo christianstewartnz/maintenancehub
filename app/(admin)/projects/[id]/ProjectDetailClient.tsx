@@ -16,6 +16,8 @@ interface Props {
   contractors: Contractor[]
   assignments: (ProjectTradeAssignment & { trade: Trade; contractor: Contractor })[]
   workOrders: (WorkOrder & { contractor: Contractor })[]
+  /** Archive/restore is admin-only. */
+  isAdmin?: boolean
 }
 
 type Tab = 'units' | 'trades' | 'work-orders'
@@ -27,7 +29,7 @@ const emptyUnitForm = {
 }
 const emptyOwnerForm = { name: '', email: '', phone: '' }
 
-export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades: initialTrades, contractors, assignments: initialAssignments, workOrders }: Props) {
+export default function ProjectDetailClient({ project: initialProject, units: initialUnits, trades: initialTrades, contractors, assignments: initialAssignments, workOrders, isAdmin = false }: Props) {
   const [project, setProject] = useState(initialProject)
   const [tab, setTab] = useState<Tab>('units')
   const [units, setUnits] = useState(initialUnits)
@@ -312,16 +314,18 @@ export default function ProjectDetailClient({ project: initialProject, units: in
           >
             <Pencil size={14} /> Edit Project
           </button>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 13, color: '#787774', gap: 6 }}
-            onClick={toggleArchive}
-            disabled={archiving}
-          >
-            {project.status === 'active'
-              ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive'}</>
-              : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore'}</>}
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 13, color: '#787774', gap: 6 }}
+              onClick={toggleArchive}
+              disabled={archiving}
+            >
+              {project.status === 'active'
+                ? <><Archive size={14} /> {archiving ? 'Archiving…' : 'Archive'}</>
+                : <><ArchiveRestore size={14} /> {archiving ? 'Restoring…' : 'Restore'}</>}
+            </button>
+          )}
         </div>
       </div>
 

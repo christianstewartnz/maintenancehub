@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/service'
+import { refuseIfNotVisible } from '../../_lib/visible'
 import { ATTACHMENTS_BUCKET, MAX_PHOTO_BYTES, SIGNED_URL_TTL_SECONDS, photoStoragePath } from '@/lib/photos'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/gif']
@@ -39,6 +40,9 @@ export async function POST(
     .eq('id', itemId).eq('contractor_id', contractor.id).maybeSingle()
   if (!item) return Response.json({ error: 'Item not found' }, { status: 404 })
   if (item.status === 'complete') return Response.json({ error: 'This item is already signed off' }, { status: 400 })
+  // Only items shown on their portal (released, open, not hidden).
+  const refused = await refuseIfNotVisible(supabase, token, item.id)
+  if (refused) return refused
 
   const path = photoStoragePath(item.id, contentType)
   const { error: upErr } = await supabase.storage

@@ -1,10 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
+// useSearchParams needs a Suspense boundary (see Next docs: use-search-params).
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
+  const deactivated = useSearchParams().get('deactivated') === '1'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +30,8 @@ export default function LoginPage() {
       const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
-        setError(error.message)
+        // A deactivated user is banned in Supabase Auth; say so plainly rather than "User is banned".
+        setError(/banned/i.test(error.message) ? 'This account has been deactivated. Contact your Maintenance Hub admin.' : error.message)
         setLoading(false)
       } else {
         router.push('/dashboard')
@@ -53,6 +64,12 @@ export default function LoginPage() {
           </h1>
           <p style={{ color: '#787774', fontSize: 14 }}>Sign in to your account</p>
         </div>
+
+        {deactivated && !error && (
+          <p role="alert" style={{ color: '#9a6700', fontSize: 13, background: '#fdf5e0', padding: '10px 12px', borderRadius: 6, margin: '0 0 16px' }}>
+            Your account has been deactivated, so you&apos;ve been signed out. If you think this is a mistake, contact your Maintenance Hub admin.
+          </p>
+        )}
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>

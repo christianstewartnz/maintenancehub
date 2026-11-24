@@ -13,7 +13,9 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const { data: contractor } = await supabase.rpc('get_portal_contractor', { p_token: token })
   if (!contractor || (contractor as any).error) notFound()
 
-  const { data: items } = await supabase.rpc('get_portal_items', { p_token: token })
+  // v2: only items the contractor has been told about (released), each with its
+  // responsible staff member as the contact. (get_portal_items is kept for the old deploy.)
+  const { data: items } = await supabase.rpc('get_portal_items_v2', { p_token: token })
 
   // The bucket is private: sign every attachment's URL server-side (token already verified above).
   const list: any[] = (items as any) ?? []

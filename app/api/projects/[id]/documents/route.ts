@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { canAccessProject, requireUser } from '@/lib/auth'
 import { PROJECT_DOCUMENTS_BUCKET, MAX_PROJECT_DOCUMENT_BYTES, projectDocumentPath } from '@/lib/project-documents'
 
 // GET  /api/projects/[id]/documents — list the project's documents (with short-lived download URLs)
@@ -7,9 +8,11 @@ import { PROJECT_DOCUMENTS_BUCKET, MAX_PROJECT_DOCUMENT_BYTES, projectDocumentPa
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const auth = await requireUser()
+  if (auth.error) return auth.error
+  // Checked through RLS before the service client (which bypasses it) touches storage
+  if (!(await canAccessProject(id))) return Response.json({ error: 'Project not found' }, { status: 404 })
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabase
     .from('project_documents')
@@ -30,12 +33,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const auth = await requireUser()
+  if (auth.error) return auth.error
+  const { user } = auth.session
+  // Checked through RLS before the service client (which bypasses it) touches storage
+  if (!(await canAccessProject(id))) return Response.json({ error: 'Project not found' }, { status: 404 })
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: project } = await supabase.from('projects').select('id').eq('id', id).single()
-  if (!project) return Response.json({ error: 'Project not found' }, { status: 404 })
 
   const form = await req.formData()
   const file = form.get('file')
