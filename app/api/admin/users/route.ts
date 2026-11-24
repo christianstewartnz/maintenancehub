@@ -49,6 +49,13 @@ export async function POST(req: Request) {
     .upsert({ id: userId, email, full_name: fullName ?? null, phone: phone ?? null, role, is_active: true, updated_at: new Date().toISOString() }, { onConflict: 'id' })
   if (profErr) return bad(`User created, but saving their profile failed: ${profErr.message}`, 500)
 
+  // Alerts only go to users with a preferences row; start them on the column defaults
+  // (contractor alerts and maintenance-due on) so they don't miss alerts until they visit Settings.
+  const { error: prefsErr } = await service
+    .from('notification_preferences')
+    .upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true })
+  if (prefsErr) return bad(`User created, but saving their notification settings failed: ${prefsErr.message}`, 500)
+
   if (projectIds.length) {
     const rows = [...new Set(projectIds as string[])].map(project_id => ({ project_id, user_id: userId, is_primary: false }))
     const { error: psErr } = await service.from('project_staff').upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true })

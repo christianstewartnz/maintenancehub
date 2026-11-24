@@ -305,7 +305,7 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
           <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: '#787774', textTransform: 'uppercase', letterSpacing: '0.05em' }}>New Items</h4>
           <p style={{ fontSize: 13, color: '#37352f', margin: '0 0 10px' }}>
             {pending.length
-              ? <><strong>{pending.length}</strong> of your item{pending.length !== 1 ? 's' : ''} assigned since their last email.</>
+              ? <><strong>{pending.length}</strong> new item{pending.length !== 1 ? 's' : ''} of yours not yet sent to them.</>
               : 'Up to date with your items.'}
           </p>
           {otherPendingCount > 0 && (
@@ -438,7 +438,10 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
           onDone={(ids, mode) => {
             const now = new Date().toISOString()
             setPending(prev => prev.filter(p => !ids.includes(p.id)))
-            setItems(prev => prev.map(i => (ids.includes(i.id) ? { ...i, contractor_notified_at: now } : i)))
+            // Notifying moves Logged → Assigned in the DB (sync_assigned_status); mirror it here.
+            setItems(prev => prev.map(i => (ids.includes(i.id)
+              ? { ...i, contractor_notified_at: now, status: i.status === 'logged' ? 'assigned' : i.status }
+              : i)))
             setLastNotifiedAt(now)
             setShowNotify(false)
             setFlash(mode === 'email' ? `Emailed ${contractor.email} about ${ids.length} item${ids.length !== 1 ? 's' : ''}.` : `Marked ${ids.length} item${ids.length !== 1 ? 's' : ''} as told.`)
