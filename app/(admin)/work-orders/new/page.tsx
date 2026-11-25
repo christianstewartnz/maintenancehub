@@ -4,7 +4,10 @@ import NewWorkOrderClient from './NewWorkOrderClient'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NewWorkOrderPage() {
+/** ?project=&contractor=&unit= preselect the form (e.g. from a project page). */
+export default async function NewWorkOrderPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams
+  const one = (v: string | string[] | undefined) => (typeof v === 'string' ? v : '')
   const supabase = await createClient()
 
   const [{ data: projects }, { data: contractors }] = await Promise.all([
@@ -15,10 +18,13 @@ export default async function NewWorkOrderPage() {
   return (
     <div>
       <PageHeader
-        backHref="/work-orders" title="New Work Order" description="Select items to group and send to a contractor" />
+        backHref="/work-orders" title="New Work Order" description="Select a unit's items to group and send to a contractor" />
       <NewWorkOrderClient
         projects={projects ?? []}
         contractors={contractors ?? []}
+        initialProjectId={one(sp.project)}
+        initialContractorId={one(sp.contractor)}
+        initialUnitId={one(sp.unit)}
       />
     </div>
   )

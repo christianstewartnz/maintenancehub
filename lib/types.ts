@@ -113,9 +113,21 @@ export interface WorkOrderRequest {
   responded_by: string | null
   responded_at: string | null
   work_order_id: string | null
+  /** Requests sent together (one work order for several items of a unit) share this; null = single item. */
+  group_id: string | null
   created_at: string
   contractor?: { id: string; company_name: string } | null
   work_order?: { id: string; work_order_number: string } | null
+  /** Every request in the group, this one included (loaded on the item page). */
+  group?: WorkOrderRequestGroupRow[]
+}
+
+export interface WorkOrderRequestGroupRow {
+  id: string
+  group_id: string
+  status: WorkOrderRequestStatus
+  maintenance_item_id: string
+  item: { id: string; item_number: string; title: string; work_order_id: string | null; archived_at: string | null; contractor_id: string | null } | null
 }
 
 export const WORK_ORDER_REQUEST_SELECT = '*, contractor:contractors(id, company_name), work_order:work_orders(id, work_order_number)'

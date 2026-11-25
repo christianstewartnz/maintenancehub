@@ -287,7 +287,7 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
         </div>
 
         <WorkOrderRequestBanner
-          item={{ id: item.id, contractor_id: item.contractor_id, work_order_id: workOrder?.id ?? null, unit: item.unit }}
+          item={{ id: item.id, item_number: item.item_number, title: item.title, contractor_id: item.contractor_id, work_order_id: workOrder?.id ?? null, unit: item.unit }}
           requests={woRequests}
           currentUserId={currentUserId}
           actorName={(() => { const me = users.find(u => u.id === currentUserId); return me ? profileName(me) : 'admin' })()}

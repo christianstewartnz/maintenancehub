@@ -43,7 +43,7 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
 
   useEffect(() => {
     async function fetchCount() {
-      const [{ count }, { data: { session } }, { count: requestCount }] = await Promise.all([
+      const [{ count }, { data: { session } }, { data: requestRows }] = await Promise.all([
         supabase
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
@@ -54,12 +54,13 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         // Contractor work order requests waiting for an answer (RLS: projects I can see)
         supabase
           .from('work_order_requests')
-          .select('id, item:maintenance_items!inner(archived_at)', { count: 'exact', head: true })
+          .select('id, group_id, item:maintenance_items!inner(archived_at)')
           .eq('status', 'pending')
           .is('item.archived_at', null),
       ])
       setSignOffCount(count ?? 0)
-      setWoRequestCount(requestCount ?? 0)
+      // Items requested together count as one request
+      setWoRequestCount(new Set((requestRows ?? []).map(r => r.group_id ?? r.id)).size)
       // "To notify" is only the user's own items (effective responsible = me): that's what they can send.
       // getSession() is only used for the user id here, not to authorise anything (RLS does that).
       const userId = session?.user.id

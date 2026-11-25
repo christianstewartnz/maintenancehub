@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendEmail, isEmailConfigured } from '@/lib/mailer'
@@ -7,19 +8,27 @@ import { getItemAlertRecipients } from '@/lib/notify-recipients'
 import { refuseIfNotVisible } from '../../_lib/visible'
 
 const MAX_REASON = 2000
+const MAX_ITEMS = 50
 
 /**
- * A contractor requests a work order on one of their portal items.
- * Body: { item_id, reason, estimated_cost? }
+ * A contractor requests one work order for one or more of their portal items.
+ * All items must be on the same unit.
+ * Body: { item_ids: string[], reason, estimated_cost? }  (or the older { item_id, … })
+ *
+ * Each item gets its own work_order_requests row; rows sent together share a group_id
+ * so staff answer them as one request.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const body = await req.json().catch(() => ({}))
-  const itemId = body?.item_id
+  const rawIds: unknown[] = Array.isArray(body?.item_ids) ? body.item_ids : body?.item_id ? [body.item_id] : []
+  const itemIds = Array.from(new Set(rawIds.filter((v): v is string => typeof v === 'string' && !!v)))
   const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
   const rawCost = body?.estimated_cost
   const estimatedCost = rawCost === null || rawCost === undefined || rawCost === '' ? null : Number(rawCost)
 
+  if (!itemIds.length) return NextResponse.json({ error: 'Choose at least one item.' }, { status: 400 })
+  if (itemIds.length > MAX_ITEMS) return NextResponse.json({ error: 'Too many items in one request.' }, { status: 400 })
   if (!reason) return NextResponse.json({ error: 'Please give a reason for the request.' }, { status: 400 })
   if (reason.length > MAX_REASON) return NextResponse.json({ error: 'Reason is too long.' }, { status: 400 })
   if (estimatedCost !== null && (!Number.isFinite(estimatedCost) || estimatedCost < 0 || estimatedCost > 10_000_000)) {
@@ -29,8 +38,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const supabase = createServiceClient()
 
   // Only items shown on their portal (released, open, not hidden).
-  const refused = await refuseIfNotVisible(supabase, token, itemId)
-  if (refused) return refused
+  for (const id of itemIds) {
+    const refused = await refuseIfNotVisible(supabase, token, id)
+    if (refused) return refused
+  }
 
   const { data: contractor } = await supabase
     .from('contractors')
@@ -39,58 +50,76 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .single()
   if (!contractor) return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
 
-  const { data: item } = await supabase
+  const { data: items } = await supabase
     .from('maintenance_items')
-    .select('id, item_number, title, contractor_id, work_order_id, unit:units(unit_identifier, address, project:projects(name))')
-    .eq('id', itemId)
-    .single()
-  if (!item || item.contractor_id !== contractor.id) {
+    .select('id, item_number, title, contractor_id, work_order_id, unit_id, unit:units(unit_identifier, address, project:projects(name))')
+    .in('id', itemIds)
+    .order('item_number')
+  if (!items || items.length !== itemIds.length || items.some(i => i.contractor_id !== contractor.id)) {
     return NextResponse.json({ error: 'Not authorised' }, { status: 403 })
   }
-  if (item.work_order_id) {
-    return NextResponse.json({ error: 'This item is already on a work order.' }, { status: 409 })
+  if (new Set(items.map(i => i.unit_id)).size > 1) {
+    return NextResponse.json({ error: 'A work order request can only include items from one unit.' }, { status: 400 })
+  }
+  const onWo = items.filter(i => i.work_order_id)
+  if (onWo.length) {
+    return NextResponse.json({ error: `${onWo.map(i => i.item_number).join(', ')} ${onWo.length === 1 ? 'is' : 'are'} already on a work order.` }, { status: 409 })
   }
 
-  const { data: request, error } = await supabase
+  const cost = estimatedCost === null ? null : Math.round(estimatedCost * 100) / 100
+  // Single-item requests keep group_id null, like the ones made before grouping existed.
+  const groupId = items.length > 1 ? randomUUID() : null
+
+  // One statement, so either every item gets a request or none do.
+  const { data: requests, error } = await supabase
     .from('work_order_requests')
-    .insert({
-      maintenance_item_id: item.id,
+    .insert(items.map(i => ({
+      maintenance_item_id: i.id,
       contractor_id: contractor.id,
       reason,
-      estimated_cost: estimatedCost === null ? null : Math.round(estimatedCost * 100) / 100,
-    })
-    .select('id, status, reason, estimated_cost, response_note, created_at, responded_at')
-    .single()
+      estimated_cost: cost,
+      group_id: groupId,
+    })))
+    .select('id, maintenance_item_id, group_id, status, reason, estimated_cost, response_note, created_at, responded_at')
 
-  if (error) {
+  if (error || !requests) {
     // work_order_requests_one_pending
-    if (error.code === '23505') return NextResponse.json({ error: 'You have already requested a work order for this item.' }, { status: 409 })
+    if (error?.code === '23505') {
+      return NextResponse.json({ error: items.length === 1
+        ? 'You have already requested a work order for this item.'
+        : 'You have already requested a work order for one of these items.' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'Could not send the request. Please try again.' }, { status: 500 })
   }
 
-  await supabase.from('activity_log').insert({
-    maintenance_item_id: item.id,
+  const otherNumbers = (id: string) => items.filter(i => i.id !== id).map(i => i.item_number)
+  await supabase.from('activity_log').insert(items.map(i => ({
+    maintenance_item_id: i.id,
     action: 'work_order_requested',
-    details: { contractor: contractor.company_name, estimated_cost: request.estimated_cost },
+    details: {
+      contractor: contractor.company_name,
+      estimated_cost: cost,
+      ...(items.length > 1 ? { with_items: otherNumbers(i.id) } : {}),
+    },
     performed_by: contractor.company_name,
-  })
+  })))
 
   if (isEmailConfigured()) {
     try {
-      // Same people who get "new contractor comment" alerts for this item.
-      const recipients = await getItemAlertRecipients(supabase, 'contractor_comment_email', item.id)
+      // Same people who get "new contractor comment" alerts, for any of the items (deduped).
+      const lists = await Promise.all(items.map(i => getItemAlertRecipients(supabase, 'contractor_comment_email', i.id)))
+      const recipients = Array.from(new Map(lists.flat().map(r => [r.email.toLowerCase(), r])).values())
       if (recipients.length) {
-        const unit = item.unit as any
+        const unit = items[0].unit as any
         const { subject, html } = workOrderRequestEmail({
-          itemTitle: item.title,
-          itemNumber: item.item_number,
+          items: items.map(i => ({ itemNumber: i.item_number, itemTitle: i.title })),
           unitLabel: formatUnitLabel(unit),
           projectName: unit?.project?.name ?? '—',
           contractorName: contractor.company_name,
           reason,
-          estimatedCost: request.estimated_cost,
+          estimatedCost: cost,
           appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-          itemId: item.id,
+          itemId: items[0].id,
         })
         await Promise.all(recipients.map(r => sendEmail({ to: r.email, subject, html })))
       }
@@ -99,5 +128,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     }
   }
 
-  return NextResponse.json({ data: request })
+  // data: one request row per item
+  return NextResponse.json({ data: requests, group_id: groupId })
 }

@@ -1,26 +1,35 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate, formatUnitLabel } from '@/lib/utils'
+import { formatUnitLabel } from '@/lib/utils'
 
 interface Props {
   projects: { id: string; name: string }[]
   contractors: { id: string; company_name: string; contact_name: string | null; email: string | null; portal_token: string }[]
+  initialProjectId?: string
+  initialContractorId?: string
+  initialUnitId?: string
 }
 
-export default function NewWorkOrderClient({ projects, contractors }: Props) {
+/**
+ * A work order covers one contractor's items on ONE unit: pick the project and
+ * contractor, then the unit, then tick any or all of its open items.
+ */
+export default function NewWorkOrderClient({ projects, contractors, initialProjectId = '', initialContractorId = '', initialUnitId = '' }: Props) {
   const router = useRouter()
   const supabase = createClient()
 
-  const [projectId, setProjectId] = useState('')
-  const [contractorId, setContractorId] = useState('')
+  const [projectId, setProjectId] = useState(projects.some(p => p.id === initialProjectId) ? initialProjectId : '')
+  const [contractorId, setContractorId] = useState(contractors.some(c => c.id === initialContractorId) ? initialContractorId : '')
+  const [unitId, setUnitId] = useState(initialUnitId)
   const [notes, setNotes] = useState('')
   const [availableItems, setAvailableItems] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [loadingItems, setLoadingItems] = useState(false)
+  // Start "loading" when both are preselected, so the unit check below waits for the fetch.
+  const [loadingItems, setLoadingItems] = useState(!!(projectId && contractorId))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,7 +42,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
     setLoadingItems(true)
     supabase
       .from('maintenance_items')
-      .select('id, item_number, title, description, status, unit:units!inner(id, unit_identifier, address, project_id)')
+      .select('id, item_number, title, description, status, unit_id, unit:units!inner(id, unit_identifier, address, project_id)')
       .eq('contractor_id', contractorId)
       .eq('unit.project_id', projectId)
       .is('work_order_id', null)
@@ -46,6 +55,31 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
       })
   }, [projectId, contractorId])
 
+  // Units that have at least one available item, in unit order.
+  const units = useMemo(() => {
+    const map = new Map<string, { unit: any; count: number }>()
+    for (const item of availableItems) {
+      const u = item.unit as any
+      if (!u) continue
+      if (!map.has(u.id)) map.set(u.id, { unit: u, count: 0 })
+      map.get(u.id)!.count++
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      formatUnitLabel(a.unit).localeCompare(formatUnitLabel(b.unit), undefined, { numeric: true }))
+  }, [availableItems])
+
+  // Keep the unit choice valid: auto-pick when there's only one, drop it if it has no items here.
+  useEffect(() => {
+    if (loadingItems) return
+    if (units.length === 1) setUnitId(units[0].unit.id)
+    else if (unitId && !units.some(u => u.unit.id === unitId)) setUnitId('')
+  }, [units, loadingItems])
+
+  // A new unit starts with nothing ticked.
+  useEffect(() => { setSelectedIds(new Set()) }, [unitId, projectId, contractorId])
+
+  const unitItems = useMemo(() => availableItems.filter(i => i.unit_id === unitId), [availableItems, unitId])
+
   function toggleItem(id: string) {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -55,15 +89,17 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
   }
 
   function toggleAll() {
-    if (selectedIds.size === availableItems.length) {
+    if (selectedIds.size === unitItems.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(availableItems.map(i => i.id)))
+      setSelectedIds(new Set(unitItems.map(i => i.id)))
     }
   }
 
   async function handleSave(andSend: boolean) {
-    if (!projectId || !contractorId || selectedIds.size === 0) return
+    // Only items on the chosen unit (the list is filtered, but be sure).
+    const ids = unitItems.filter(i => selectedIds.has(i.id)).map(i => i.id)
+    if (!projectId || !contractorId || !unitId || ids.length === 0) return
     setSaving(true)
     setError('')
 
@@ -82,7 +118,8 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
     const { error: itemErr } = await supabase
       .from('maintenance_items')
       .update({ work_order_id: wo.id })
-      .in('id', Array.from(selectedIds))
+      .in('id', ids)
+      .eq('unit_id', unitId)
 
     if (itemErr) {
       setError('Work order created but failed to link some items.')
@@ -104,21 +141,22 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
     router.push(`/work-orders/${wo.id}`)
   }
 
-  const canSubmit = projectId && contractorId && selectedIds.size > 0
+  const canSubmit = projectId && contractorId && unitId && selectedIds.size > 0
+  const label = { display: 'block', fontSize: 13, fontWeight: 500, color: '#37352f', marginBottom: 6 } as const
 
   return (
     <div className="page-content" style={{ padding: '24px 32px', maxWidth: 900 }}>
       {/* Project + Contractor selectors */}
-      <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+      <div className="stack-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#37352f', marginBottom: 6 }}>Project</label>
+          <label style={label}>Project</label>
           <select className="input" value={projectId} onChange={e => setProjectId(e.target.value)}>
             <option value="">Select a project…</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#37352f', marginBottom: 6 }}>Contractor</label>
+          <label style={label}>Contractor</label>
           <select className="input" value={contractorId} onChange={e => setContractorId(e.target.value)}>
             <option value="">Select a contractor…</option>
             {contractors.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
@@ -126,69 +164,80 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
         </div>
       </div>
 
-      {/* Items */}
       {projectId && contractorId && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#37352f' }}>
-              Available Items
-              {availableItems.length > 0 && <span style={{ marginLeft: 8, color: '#787774', fontWeight: 400 }}>({availableItems.length})</span>}
-            </h3>
-            {availableItems.length > 0 && (
-              <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={toggleAll}>
-                {selectedIds.size === availableItems.length ? 'Deselect all' : 'Select all'}
-              </button>
-            )}
+        loadingItems ? (
+          <p style={{ color: '#787774', fontSize: 14, marginBottom: 24 }}>Loading items…</p>
+        ) : units.length === 0 ? (
+          <div className="empty-state" style={{ background: '#f7f7f5', marginBottom: 24 }}>
+            <p style={{ fontWeight: 500 }}>No available items</p>
+            <p>This contractor has no open maintenance items in this project that aren&apos;t already on a work order.</p>
           </div>
+        ) : (
+          <>
+            {/* Unit selector: a work order covers one unit */}
+            <div style={{ marginBottom: 24 }}>
+              <label style={label}>
+                Unit <span style={{ fontWeight: 400, color: '#787774' }}>(a work order covers one unit)</span>
+              </label>
+              <select className="input" value={unitId} onChange={e => setUnitId(e.target.value)} style={{ maxWidth: 420 }}>
+                <option value="">Select a unit…</option>
+                {units.map(({ unit, count }) => (
+                  <option key={unit.id} value={unit.id}>{formatUnitLabel(unit)} — {count} item{count !== 1 ? 's' : ''}</option>
+                ))}
+              </select>
+            </div>
 
-          {loadingItems ? (
-            <p style={{ color: '#787774', fontSize: 14 }}>Loading items…</p>
-          ) : availableItems.length === 0 ? (
-            <div className="empty-state" style={{ background: '#f7f7f5' }}>
-              <p style={{ fontWeight: 500 }}>No available items</p>
-              <p>This contractor has no open maintenance items in this project that aren&apos;t already on a work order.</p>
-            </div>
-          ) : (
-            <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, overflow: 'hidden' }}>
-              <table className="data-table" style={{ marginBottom: 0 }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 40 }}></th>
-                    <th>#</th>
-                    <th>Title</th>
-                    <th>Unit</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {availableItems.map(item => {
-                    const unit = item.unit as any
-                    const checked = selectedIds.has(item.id)
-                    return (
-                      <tr key={item.id} style={{ cursor: 'pointer', background: checked ? '#f0f7ff' : undefined }} onClick={() => toggleItem(item.id)}>
-                        <td onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" checked={checked} onChange={() => toggleItem(item.id)} style={{ cursor: 'pointer' }} />
-                        </td>
-                        <td style={{ fontSize: 13, color: '#787774' }}>{item.item_number}</td>
-                        <td className="wrap-mobile" style={{ fontWeight: 500 }}>{item.title}</td>
-                        <td style={{ fontSize: 13 }}>
-                          {formatUnitLabel(unit)}
-                        </td>
-                        <td><StatusBadge status={item.status} /></td>
+            {/* Items on that unit */}
+            {unitId && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#37352f' }}>
+                    Available Items
+                    <span style={{ marginLeft: 8, color: '#787774', fontWeight: 400 }}>({unitItems.length})</span>
+                  </h3>
+                  {unitItems.length > 1 && (
+                    <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={toggleAll}>
+                      {selectedIds.size === unitItems.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  )}
+                </div>
+                <div style={{ border: '1px solid #e9e9e7', borderRadius: 8, overflow: 'hidden' }}>
+                  <table className="data-table" style={{ marginBottom: 0 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 40 }}></th>
+                        <th>#</th>
+                        <th>Title</th>
+                        <th>Status</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                    </thead>
+                    <tbody>
+                      {unitItems.map(item => {
+                        const checked = selectedIds.has(item.id)
+                        return (
+                          <tr key={item.id} style={{ cursor: 'pointer', background: checked ? '#f0f7ff' : undefined }} onClick={() => toggleItem(item.id)}>
+                            <td onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleItem(item.id)} style={{ cursor: 'pointer' }} />
+                            </td>
+                            <td style={{ fontSize: 13, color: '#787774' }}>{item.item_number}</td>
+                            <td className="wrap-mobile" style={{ fontWeight: 500 }}>{item.title}</td>
+                            <td><StatusBadge status={item.status} /></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )
       )}
 
       {/* Notes */}
-      {projectId && contractorId && (
+      {projectId && contractorId && unitId && (
         <div style={{ marginBottom: 24 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#37352f', marginBottom: 6 }}>
+          <label style={label}>
             Notes / Instructions <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
           </label>
           <textarea
@@ -204,7 +253,7 @@ export default function NewWorkOrderClient({ projects, contractors }: Props) {
       {error && <p style={{ color: '#e03131', fontSize: 14, marginBottom: 16 }}>{error}</p>}
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="btn btn-secondary" onClick={() => router.back()} disabled={saving}>Cancel</button>
         <div style={{ flex: 1 }} />
         {selectedIds.size > 0 && (

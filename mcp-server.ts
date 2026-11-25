@@ -1519,11 +1519,11 @@ server.tool(
 
 server.tool(
   'create_work_order',
-  'Create a new work order grouping maintenance items for a contractor',
+  'Create a new work order grouping maintenance items for a contractor. All items must be on the same unit (one work order per unit).',
   {
     project: z.string().describe('Project name (partial) or ID'),
     contractor: z.string().describe('Contractor company name (partial) or ID'),
-    item_numbers: z.array(z.string()).describe('Item numbers to include e.g. ["MH-0001","MH-0005"]'),
+    item_numbers: z.array(z.string()).describe('Item numbers to include, all on the same unit e.g. ["MI-0001","MI-0005"]'),
     notes: z.string().optional(),
   },
   async ({ project, contractor, item_numbers, notes }) => {
@@ -1533,6 +1533,14 @@ server.tool(
     const c = await resolveContractor(contractor)
     if (!c) return { content: [{ type: 'text', text: `Contractor "${contractor}" not found.` }] }
 
+    // A work order covers one unit: check before creating anything.
+    const items = await Promise.all(item_numbers.map(n => resolveItemByNumber(n)))
+    const validIds = items.filter(Boolean).map(i => i!.id)
+    const unitIds = new Set(items.filter(Boolean).map(i => i!.unit_id))
+    if (unitIds.size > 1) {
+      return { content: [{ type: 'text', text: 'Those items are on different units. A work order can only include items from one unit — create one work order per unit.' }] }
+    }
+
     const { data: wo, error: woErr } = await supabase
       .from('work_orders')
       .insert({ project_id: proj.id, contractor_id: c.id, notes: notes ?? null })
@@ -1540,9 +1548,6 @@ server.tool(
       .single()
 
     if (woErr) return { content: [{ type: 'text', text: `Error creating work order: ${woErr.message}` }] }
-
-    const items = await Promise.all(item_numbers.map(n => resolveItemByNumber(n)))
-    const validIds = items.filter(Boolean).map(i => i!.id)
 
     if (validIds.length) {
       const { error: linkErr } = await supabase

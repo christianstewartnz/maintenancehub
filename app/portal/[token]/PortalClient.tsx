@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
@@ -112,6 +112,9 @@ function ContactNote({ contact, style }: { contact: Contact; style?: React.CSSPr
 /** The contractor's latest work order request on an item (see work_order_requests). */
 type WoRequest = {
   id: string
+  maintenance_item_id?: string
+  /** Shared by the items requested together on one work order; null = single item. */
+  group_id?: string | null
   status: 'pending' | 'approved' | 'declined'
   reason: string
   estimated_cost: number | null
@@ -124,16 +127,20 @@ function formatMoney(n: number) {
   return `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/** Can this item go on a new work order request? (Not on a work order, not already asked for, not finished.) */
+function canRequestWo(item: any): boolean {
+  return !item.work_order
+    && item.wo_request?.status !== 'pending'
+    && item.status !== 'contractor_complete'
+    && item.status !== 'complete'
+}
+
 /**
- * Lets the contractor request a work order on an item, and shows how that request went.
+ * How the contractor's work order request on an item went, plus a button that opens
+ * the unit's request form with this item ticked.
  */
-function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token: string; onRequested: (r: WoRequest) => void }) {
+function WorkOrderRequestPanel({ item, siblings, onStartRequest }: { item: any; siblings: any[]; onStartRequest: () => void }) {
   const request: WoRequest | null = item.wo_request ?? null
-  const [open, setOpen] = useState(false)
-  const [reason, setReason] = useState('')
-  const [cost, setCost] = useState('')
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState('')
 
   // Already on a work order (drafts included): nothing to ask for.
   if (item.work_order) return null
@@ -144,6 +151,13 @@ function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token:
   const quote = (text: string) => (
     <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', color: '#37352f' }}>{text}</p>
   )
+  // Other items on this unit that were requested together with this one.
+  const together = request?.group_id
+    ? siblings.filter(s => s.id !== item.id && s.wo_request?.group_id === request.group_id).map(s => s.item_number)
+    : []
+  const togetherNote = together.length > 0 && (
+    <div style={{ marginTop: 2 }}>Requested together with {together.join(', ')}.</div>
+  )
 
   if (request?.status === 'pending') {
     return (
@@ -152,6 +166,7 @@ function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token:
           <Receipt size={13} /> Work order requested {formatDateTime(request.created_at)}
         </div>
         <div style={{ marginTop: 2 }}>Waiting for Stratum to review.{request.estimated_cost != null && ` Your estimate: ${formatMoney(request.estimated_cost)} + GST.`}</div>
+        {togetherNote}
         {quote(request.reason)}
       </div>
     )
@@ -169,30 +184,6 @@ function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token:
     )
   }
 
-  async function submit() {
-    setSending(true)
-    setError('')
-    try {
-      const res = await fetch(`/api/portal/${token}/request-work-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: item.id, reason, estimated_cost: cost.trim() === '' ? null : cost }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok || !json.data) {
-        setError(json.error ?? `Request failed (${res.status})`)
-      } else {
-        onRequested(json.data)
-        setOpen(false)
-        setReason('')
-        setCost('')
-      }
-    } catch {
-      setError('Request failed — check your connection and try again')
-    }
-    setSending(false)
-  }
-
   return (
     <div style={{ marginBottom: 16 }}>
       {request?.status === 'declined' && (
@@ -205,54 +196,131 @@ function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token:
             : <div style={{ marginTop: 2 }}>Contact Stratum if you have any questions.</div>}
         </div>
       )}
+      <button
+        type="button"
+        className="btn btn-secondary"
+        style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+        onClick={onStartRequest}
+      >
+        <Receipt size={13} /> {request?.status === 'declined' ? 'Request work order again' : 'Request work order'}
+      </button>
+    </div>
+  )
+}
 
-      {!open ? (
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
-          onClick={() => setOpen(true)}
-        >
-          <Receipt size={13} /> {request?.status === 'declined' ? 'Request work order again' : 'Request work order'}
-        </button>
-      ) : (
-        <div style={{ padding: '12px', background: '#f7f7f5', borderRadius: 6 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>Request work order</div>
-          <p style={{ margin: '0 0 8px', fontSize: 12, color: '#787774' }}>
-            Stratum will review your request before you do the work.
-          </p>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', marginBottom: 4 }}>Reason</label>
-          <textarea
-            className="input"
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            placeholder="Why are you requesting a work order for this item?"
-            style={{ minHeight: 70 }}
-            maxLength={2000}
-          />
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', margin: '8px 0 4px' }}>
-            Estimated cost, excl. GST <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
+/**
+ * Request one work order for any of the unit's items: tick the items, give a reason
+ * and an optional estimate for them all.
+ */
+function UnitWorkOrderRequest({ items, initialIds, token, onRequested, onClose }: {
+  /** The unit's items that can be requested (canRequestWo). */
+  items: any[]
+  initialIds: string[]
+  token: string
+  onRequested: (rows: WoRequest[]) => void
+  onClose: () => void
+}) {
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(initialIds.filter(id => items.some(i => i.id === id))))
+  const [reason, setReason] = useState('')
+  const [cost, setCost] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }) }, [])
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const allTicked = selected.size === items.length
+
+  async function submit() {
+    setSending(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/portal/${token}/request-work-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_ids: Array.from(selected), reason, estimated_cost: cost.trim() === '' ? null : cost }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !Array.isArray(json.data)) {
+        setError(json.error ?? `Request failed (${res.status})`)
+      } else {
+        onRequested(json.data)
+        onClose()
+        return
+      }
+    } catch {
+      setError('Request failed — check your connection and try again')
+    }
+    setSending(false)
+  }
+
+  return (
+    <div ref={ref} onClick={e => e.stopPropagation()} style={{ padding: 12, background: 'white', border: '1px solid #e9e9e7', borderRadius: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>
+        <Receipt size={13} /> Request work order
+      </div>
+      <p style={{ margin: '0 0 10px', fontSize: 12, color: '#787774' }}>
+        Tick the items on this unit to include. Stratum will review your request before you do the work.
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: '#37352f' }}>Items</span>
+        {items.length > 1 && (
+          <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: '2px 6px' }}
+            onClick={() => setSelected(allTicked ? new Set() : new Set(items.map(i => i.id)))}>
+            {allTicked ? 'Clear' : 'Select all'}
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 10, border: '1px solid #f0f0ee', borderRadius: 6, padding: 4 }}>
+        {items.map(i => (
+          <label key={i.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 8px', borderRadius: 4, cursor: 'pointer', background: selected.has(i.id) ? '#f0f7ff' : undefined, fontSize: 13 }}>
+            <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} style={{ marginTop: 2, cursor: 'pointer' }} />
+            <span>
+              <span style={{ color: '#a0a09e', marginRight: 6 }}>{i.item_number}</span>
+              <span style={{ color: '#37352f', fontWeight: 500 }}>{i.title}</span>
+            </span>
           </label>
-          <input
-            className="input"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.01"
-            value={cost}
-            onChange={e => setCost(e.target.value)}
-            placeholder="$"
-            style={{ maxWidth: 180 }}
-          />
-          {error && <p style={{ margin: '8px 0 0', fontSize: 13, color: '#e03131' }}>{error}</p>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button className="btn btn-primary" disabled={!reason.trim() || sending} onClick={submit}>
-              {sending ? 'Sending…' : 'Send Request'}
-            </button>
-            <button className="btn btn-ghost" disabled={sending} onClick={() => { setOpen(false); setError('') }}>Cancel</button>
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
+
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', marginBottom: 4 }}>Reason</label>
+      <textarea
+        className="input"
+        value={reason}
+        onChange={e => setReason(e.target.value)}
+        placeholder={selected.size > 1 ? 'Why are you requesting a work order for these items?' : 'Why are you requesting a work order for this item?'}
+        style={{ minHeight: 70 }}
+        maxLength={2000}
+      />
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', margin: '8px 0 4px' }}>
+        Estimated cost{selected.size > 1 ? ' for all items' : ''}, excl. GST <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
+      </label>
+      <input
+        className="input"
+        type="number"
+        inputMode="decimal"
+        min="0"
+        step="0.01"
+        value={cost}
+        onChange={e => setCost(e.target.value)}
+        placeholder="$"
+        style={{ maxWidth: 180 }}
+      />
+      {error && <p style={{ margin: '8px 0 0', fontSize: 13, color: '#e03131' }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" disabled={!reason.trim() || selected.size === 0 || sending} onClick={submit}>
+          {sending ? 'Sending…' : selected.size > 1 ? `Send Request (${selected.size} items)` : 'Send Request'}
+        </button>
+        <button className="btn btn-ghost" disabled={sending} onClick={onClose}>Cancel</button>
+      </div>
     </div>
   )
 }
@@ -274,15 +342,17 @@ interface ItemProps {
   onPhotosChange: (photos: PhotoWithUrl[]) => void
   /** Show the item's contact here (false when the whole project has one contact, shown on the project). */
   showContact: boolean
-  token: string
-  onWoRequested: (r: WoRequest) => void
+  /** The other items on this unit (to name the ones requested together). */
+  unitItems: any[]
+  /** Open the unit's work order request form with this item ticked. */
+  onStartWoRequest: () => void
 }
 
 function ItemRow({
   item, isExpanded, onToggle,
   comment, onComment, onSubmitComment,
   onUpdateStatus, onSetScheduledDate, onUploadPhoto, onPhotosChange,
-  isStatusSubmitting, isCommentSubmitting, isDateSubmitting, showContact, token, onWoRequested,
+  isStatusSubmitting, isCommentSubmitting, isDateSubmitting, showContact, unitItems, onStartWoRequest,
 }: ItemProps) {
   const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
   const isDone = item.status === 'contractor_complete' || item.status === 'complete'
@@ -408,7 +478,7 @@ function ItemRow({
           )}
 
           {item.status !== 'contractor_complete' && (
-            <WorkOrderRequestPanel item={item} token={token} onRequested={onWoRequested} />
+            <WorkOrderRequestPanel item={item} siblings={unitItems} onStartRequest={onStartWoRequest} />
           )}
 
           {/* Scheduled date */}
@@ -480,6 +550,26 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
   const [comments, setComments] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({})
   const [filterStatus, setFilterStatus] = useState<MaintenanceStatus | 'all'>('all')
+  /** The unit whose "Request work order" form is open, and the items ticked when it opened. */
+  const [woRequestFor, setWoRequestFor] = useState<{ unitId: string; ids: string[] } | null>(null)
+
+  /** Every item on a unit (ignores the status filter). */
+  const itemsByUnit = useMemo(() => {
+    const map = new Map<string, any[]>()
+    for (const i of items) {
+      const id = i.unit?.id
+      if (!id) continue
+      if (!map.has(id)) map.set(id, [])
+      map.get(id)!.push(i)
+    }
+    return map
+  }, [items])
+
+  /** Put the new request rows (one per item) on their items. */
+  function applyWoRequests(rows: WoRequest[]) {
+    const byItem = new Map(rows.map(r => [r.maintenance_item_id, r]))
+    setItems(prev => prev.map(i => byItem.has(i.id) ? { ...i, wo_request: byItem.get(i.id) } : i))
+  }
 
   // Project → Unit → Items for Maintenance tab
   const grouped = useMemo(() => {
@@ -716,6 +806,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                         const unitAddress: string = unit.address?.trim() ?? ''
                         const unitHeading = unitNumber || unitAddress || 'Unit'
                         const hasAddress = !!unitAddress && !!unitNumber && unitAddress !== unitNumber
+                        const allUnitItems = itemsByUnit.get(unit.id) ?? []
+                        const requestable = allUnitItems.filter(canRequestWo)
 
                         return (
                           <div key={unit.id} className={`unit-card unit-card--${summary.state}`} style={{ borderRadius: 8, overflow: 'hidden' }}>
@@ -797,6 +889,28 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                             {/* Maintenance items — shown when unit is expanded */}
                             {isUnitOpen && (
                               <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '12px 12px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.015)' }}>
+                                {/* One work order request for any of this unit's items */}
+                                {woRequestFor && woRequestFor.unitId === unit.id ? (
+                                  <UnitWorkOrderRequest
+                                    key={woRequestFor.ids.join(',')}
+                                    items={requestable}
+                                    initialIds={woRequestFor.ids}
+                                    token={token}
+                                    onRequested={applyWoRequests}
+                                    onClose={() => setWoRequestFor(null)}
+                                  />
+                                ) : requestable.length > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                    <button
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+                                      onClick={() => setWoRequestFor({ unitId: unit.id, ids: requestable.length === 1 ? [requestable[0].id] : [] })}
+                                    >
+                                      <Receipt size={13} /> Request work order
+                                    </button>
+                                  </div>
+                                )}
                                 {unitItems.map((item: any) => (
                                   <ItemRow
                                     key={item.id}
@@ -812,8 +926,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
                                     isDateSubmitting={!!submitting[`date-${item.id}`]}
                                     showContact={!projectContact}
-                                    token={token}
-                                    onWoRequested={r => setItems(prev => prev.map(i => i.id === item.id ? { ...i, wo_request: r } : i))}
+                                    unitItems={allUnitItems}
+                                    onStartWoRequest={() => setWoRequestFor({ unitId: unit.id, ids: [item.id] })}
                                     onUploadPhoto={(blob, name) => uploadPhoto(item.id, blob, name)}
                                     onPhotosChange={photos => setItems(prev => prev.map(i => i.id === item.id ? { ...i, attachments: photos } : i))}
                                   />

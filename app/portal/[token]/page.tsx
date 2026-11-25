@@ -28,7 +28,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   if (list.length) {
     const { data: requests } = await service
       .from('work_order_requests')
-      .select('id, maintenance_item_id, status, reason, estimated_cost, response_note, created_at, responded_at')
+      .select('id, maintenance_item_id, group_id, status, reason, estimated_cost, response_note, created_at, responded_at')
       .eq('contractor_id', (contractor as any).id)
       .in('maintenance_item_id', list.map(i => i.id))
       .order('created_at', { ascending: false })

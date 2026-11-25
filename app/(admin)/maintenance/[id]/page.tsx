@@ -50,6 +50,19 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
     projectId ? fetchProjectStaff(supabase, [projectId]) : Promise.resolve([]),
   ])
 
+  // Requests sent together with this item's (one work order for several items of the unit)
+  const woRequests: any[] = woRequestsRes.data ?? []
+  const groupIds = Array.from(new Set(woRequests.map(r => r.group_id).filter(Boolean)))
+  if (groupIds.length) {
+    const { data: groupRows } = await supabase
+      .from('work_order_requests')
+      .select('id, group_id, status, maintenance_item_id, item:maintenance_items(id, item_number, title, work_order_id, archived_at, contractor_id)')
+      .in('group_id', groupIds)
+    for (const r of woRequests) {
+      r.group = r.group_id ? (groupRows ?? []).filter(g => g.group_id === r.group_id) : []
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -76,7 +89,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         users={usersRes.data ?? []}
         projectStaff={projectStaff}
         currentUserId={user?.id ?? ''}
-        woRequests={(woRequestsRes.data ?? []) as any}
+        woRequests={woRequests}
       />
     </div>
   )
