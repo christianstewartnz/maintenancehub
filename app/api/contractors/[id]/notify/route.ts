@@ -5,6 +5,7 @@ import { contractorNewItemsEmail } from '@/lib/email-templates'
 import { fetchMyPendingNotify, PENDING_NOTIFY_SELECT } from '@/lib/contractor-notify'
 import { requireUser, isAdmin } from '@/lib/auth'
 import { buildOutlookDraft, attachmentDisposition } from '@/lib/outlook-draft'
+import { contractorRecipients } from '@/lib/contractor-recipients'
 
 interface PendingItem {
   id: string
@@ -24,43 +25,6 @@ interface PendingItem {
 const EMAIL_SELECT =
   'id, item_number, title, assigned_to, parent_item_id, unit:units(project_id, unit_identifier, address, project:projects(name), owners:unit_owners(name, email, phone))'
 
-type Client = Awaited<ReturnType<typeof createClient>>
-
-/**
- * Everyone a Notify goes to: the contractor's main email plus each extra contact's
- * email (contractor_contacts), deduplicated, in one email. `greeting` is their first
- * names ("Dave and Sam"), or null if none are known.
- */
-async function contractorRecipients(
-  supabase: Client,
-  contractor: { id: string; email: string | null; contact_name: string | null },
-): Promise<{ emails: string[]; greeting: string | null }> {
-  const { data: contacts } = await supabase
-    .from('contractor_contacts')
-    .select('name, email, created_at')
-    .eq('contractor_id', contractor.id)
-    .order('created_at')
-  const people = [
-    { name: contractor.contact_name, email: contractor.email },
-    ...((contacts ?? []) as { name: string | null; email: string | null }[]),
-  ]
-
-  const emails: string[] = []
-  const firstNames: string[] = []
-  for (const p of people) {
-    // A cell may hold several addresses ("a@x.nz; b@x.nz").
-    const addrs = (p.email ?? '').split(/[;,\s]+/).map(e => e.trim()).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
-    const fresh = addrs.filter(e => !emails.some(x => x.toLowerCase() === e.toLowerCase()))
-    emails.push(...fresh)
-    const first = p.name?.trim().split(/\s+/)[0]
-    // Greet people who receive it (or the main contact, who always appears first).
-    if (first && (fresh.length || p === people[0]) && !firstNames.includes(first)) firstNames.push(first)
-  }
-  const greeting = firstNames.length <= 1
-    ? firstNames[0] ?? null
-    : `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`
-  return { emails, greeting }
-}
 
 /** "Christian Stewart", else the email's local part. */
 function displayName(p: { full_name: string | null; email: string | null } | undefined): string {

@@ -11,6 +11,7 @@ export async function buildOutlookDraft(opts: {
   subject: string
   html: string
   text?: string
+  attachments?: { filename: string; content: Buffer; contentType?: string }[]
 }): Promise<Buffer> {
   const composer = new MailComposer({
     to: opts.to.join(', '),
@@ -19,6 +20,7 @@ export async function buildOutlookDraft(opts: {
     html: opts.html,
     text: opts.text,
     headers: { 'X-Unsent': '1' },
+    attachments: opts.attachments,
   })
   return composer.compile().build()
 }

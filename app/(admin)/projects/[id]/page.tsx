@@ -22,7 +22,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     supabase.from('trades').select('*').eq('project_id', id).order('name'),
     supabase.from('contractors').select('*').order('company_name'),
     supabase.from('project_trade_assignments').select('*, trade:trades(*), contractor:contractors(*)').eq('project_id', id),
-    supabase.from('work_orders').select('*, contractor:contractors(id, company_name)').eq('project_id', id).order('created_at', { ascending: false }),
+    supabase.from('work_orders').select('*, contractor:contractors(id, company_name)').eq('project_id', id).is('archived_at', null).order('created_at', { ascending: false }),
     fetchProjectStaff(supabase, [id]),
     // Who an admin can add to the Staff card.
     admin

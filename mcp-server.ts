@@ -1451,15 +1451,17 @@ server.tool(
     status: z.enum(['draft', 'sent', 'in_progress', 'complete', 'all']).optional(),
     project: z.string().optional().describe('Filter by project name (partial) or ID'),
     limit: z.number().min(1).max(50).optional().describe('Default 10'),
+    include_archived: z.boolean().optional().describe('Also list archived work orders (default false)'),
   },
-  async ({ status, project, limit = 10 }) => {
+  async ({ status, project, limit = 10, include_archived = false }) => {
     let query = supabase
       .from('work_orders')
-      .select('id, work_order_number, status, sent_at, notes, project:projects(name), contractor:contractors(company_name)')
+      .select('id, work_order_number, status, sent_at, notes, archived_at, project:projects(name), contractor:contractors(company_name)')
       .order('created_at', { ascending: false })
       .limit(limit)
 
     if (status && status !== 'all') query = query.eq('status', status)
+    if (!include_archived) query = query.is('archived_at', null)
 
     if (project) {
       const proj = await resolveProjectAny(project)
@@ -1471,7 +1473,7 @@ server.tool(
 
     const text = data.map(wo => {
       const sentDate = wo.sent_at ? new Date(wo.sent_at).toLocaleDateString('en-NZ') : '—'
-      return `[${wo.work_order_number}] ${(wo.project as any)?.name ?? '?'} → ${(wo.contractor as any)?.company_name ?? '?'} | ${wo.status} | sent: ${sentDate} [id: ${wo.id}]`
+      return `[${wo.work_order_number}] ${(wo.project as any)?.name ?? '?'} → ${(wo.contractor as any)?.company_name ?? '?'} | ${wo.status}${wo.archived_at ? ' (archived)' : ''} | sent: ${sentDate} [id: ${wo.id}]`
     }).join('\n')
 
     return { content: [{ type: 'text', text: text || 'No work orders found.' }] }

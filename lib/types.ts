@@ -91,6 +91,8 @@ export interface WorkOrder {
   status: WorkOrderStatus
   sent_at: string | null
   notes: string | null
+  /** Archived: hidden from lists. Editable only while status is 'draft'. */
+  archived_at: string | null
   created_at: string
   updated_at: string
   project?: Project

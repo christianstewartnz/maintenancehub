@@ -24,6 +24,24 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
 
   if (!workOrder) notFound()
 
+  // Items that could be added while it's a draft: this contractor's open, unassigned
+  // items in the project — on the same unit as the current items (one unit per work order).
+  let available: any[] = []
+  if (workOrder.status === 'draft' && !workOrder.archived_at) {
+    const unitId = items?.[0]?.unit_id as string | undefined
+    let q = supabase
+      .from('maintenance_items')
+      .select('id, item_number, title, status, unit_id, unit:units!inner(id, unit_identifier, address, project_id)')
+      .eq('contractor_id', workOrder.contractor_id)
+      .eq('unit.project_id', workOrder.project_id)
+      .is('work_order_id', null)
+      .is('archived_at', null)
+      .neq('status', 'complete')
+      .order('created_at')
+    if (unitId) q = q.eq('unit_id', unitId)
+    available = (await q).data ?? []
+  }
+
   return (
     <div>
       <PageHeader
@@ -31,7 +49,7 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
         title={workOrder.work_order_number}
         description={`${(workOrder.project as any)?.name} — ${(workOrder.contractor as any)?.company_name}`}
       />
-      <WorkOrderDetailClient workOrder={workOrder as any} items={items ?? []} />
+      <WorkOrderDetailClient workOrder={workOrder as any} items={items ?? []} available={available} />
     </div>
   )
 }

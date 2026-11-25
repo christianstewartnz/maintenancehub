@@ -96,7 +96,7 @@ export default function NewWorkOrderClient({ projects, contractors, initialProje
     }
   }
 
-  async function handleSave(andSend: boolean) {
+  async function handleSave(then: 'draft' | 'send' | 'outlook') {
     // Only items on the chosen unit (the list is filtered, but be sure).
     const ids = unitItems.filter(i => selectedIds.has(i.id)).map(i => i.id)
     if (!projectId || !contractorId || !unitId || ids.length === 0) return
@@ -128,13 +128,28 @@ export default function NewWorkOrderClient({ projects, contractors, initialProje
       return
     }
 
-    if (andSend) {
+    if (then === 'send') {
       const res = await fetch(`/api/work-orders/${wo.id}/send`, { method: 'POST' })
       if (!res.ok) {
         setError('Work order created but email failed to send. You can retry from the detail page.')
         setSaving(false)
         router.push(`/work-orders/${wo.id}`)
         return
+      }
+    }
+
+    if (then === 'outlook') {
+      // The .eml draft (PDF attached); generating it marks the work order as sent.
+      const res = await fetch(`/api/work-orders/${wo.id}/outlook`, { method: 'POST' })
+      if (res.ok) {
+        const url = URL.createObjectURL(await res.blob())
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${wo.work_order_number} - ${(contractors.find(c => c.id === contractorId)?.company_name ?? 'Work order').trim()}.eml`.replace(/[\\/:*?"<>|]+/g, '-')
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
       }
     }
 
@@ -261,10 +276,18 @@ export default function NewWorkOrderClient({ projects, contractors, initialProje
             {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
         )}
-        <button className="btn btn-secondary" onClick={() => handleSave(false)} disabled={!canSubmit || saving}>
+        <button className="btn btn-secondary" onClick={() => handleSave('draft')} disabled={!canSubmit || saving}>
           {saving ? 'Saving…' : 'Save as Draft'}
         </button>
-        <button className="btn btn-primary" onClick={() => handleSave(true)} disabled={!canSubmit || saving}>
+        <button
+          className="btn btn-secondary"
+          onClick={() => handleSave('outlook')}
+          disabled={!canSubmit || saving}
+          title="Save, then download the work order email (PDF attached) to send from your own Outlook. Marks it as sent."
+        >
+          {saving ? 'Saving…' : 'Save & Outlook email'}
+        </button>
+        <button className="btn btn-primary" onClick={() => handleSave('send')} disabled={!canSubmit || saving}>
           {saving ? 'Sending…' : 'Save & Send'}
         </button>
       </div>

@@ -3,17 +3,20 @@ import PageHeader from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatHours, formatUnitLabel } from '@/lib/utils'
-import { Plus, Receipt } from 'lucide-react'
+import { Plus, Receipt, Archive } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
-export default async function WorkOrdersPage() {
+export default async function WorkOrdersPage({ searchParams }: { searchParams: Promise<{ archived?: string }> }) {
+  const showArchived = (await searchParams).archived === '1'
   const supabase = await createClient()
+  let woQuery = supabase
+    .from('work_orders')
+    .select('*, project:projects(id, name), contractor:contractors(id, company_name)')
+    .order('created_at', { ascending: false })
+  woQuery = showArchived ? woQuery.not('archived_at', 'is', null) : woQuery.is('archived_at', null)
   const [{ data: workOrders }, { data: requests }] = await Promise.all([
-    supabase
-      .from('work_orders')
-      .select('*, project:projects(id, name), contractor:contractors(id, company_name)')
-      .order('created_at', { ascending: false }),
+    woQuery,
     // Contractors asking for a work order from the portal, waiting for an answer (RLS: projects I can see)
     supabase
       .from('work_order_requests')
@@ -92,7 +95,19 @@ export default async function WorkOrdersPage() {
           </div>
         )}
 
-        {!workOrders?.length ? (
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#37352f' }}>
+            {showArchived ? 'Archived work orders' : 'Work orders'}
+          </h3>
+          <div style={{ flex: 1 }} />
+          <Link href={showArchived ? '/work-orders' : '/work-orders?archived=1'} style={{ fontSize: 13, color: '#787774', display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+            <Archive size={13} /> {showArchived ? 'Back to current' : 'Show archived'}
+          </Link>
+        </div>
+
+        {showArchived && !workOrders?.length ? (
+          <div className="empty-state"><p>No archived work orders.</p></div>
+        ) : !workOrders?.length ? (
           <div className="empty-state">
             <p style={{ fontSize: 15, fontWeight: 500 }}>No work orders yet</p>
             <p>Create a work order to group and send maintenance items to a contractor.</p>
