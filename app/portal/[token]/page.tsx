@@ -13,7 +13,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const { data: contractor } = await supabase.rpc('get_portal_contractor', { p_token: token })
   if (!contractor || (contractor as any).error) notFound()
 
-  // v2: only items the contractor has been told about (released), each with its
+  // v2: every open item that isn't hidden, each with its
   // responsible staff member as the contact. (get_portal_items is kept for the old deploy.)
   const { data: items } = await supabase.rpc('get_portal_items_v2', { p_token: token })
 

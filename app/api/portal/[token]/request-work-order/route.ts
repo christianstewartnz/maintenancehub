@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const supabase = createServiceClient()
 
-  // Only items shown on their portal (released, open, not hidden).
+  // Only items shown on their portal (open, not hidden).
   const refused = await refuseIfNotVisible(supabase, token, itemId)
   if (refused) return refused
 

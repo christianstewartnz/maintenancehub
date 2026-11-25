@@ -4,6 +4,7 @@ import { sendEmail, isEmailConfigured } from '@/lib/mailer'
 import { contractorNewItemsEmail } from '@/lib/email-templates'
 import { fetchMyPendingNotify, PENDING_NOTIFY_SELECT } from '@/lib/contractor-notify'
 import { requireUser, isAdmin } from '@/lib/auth'
+import { buildOutlookDraft, attachmentDisposition } from '@/lib/outlook-draft'
 
 interface PendingItem {
   id: string
@@ -78,10 +79,12 @@ export async function GET(
 
 /**
  * POST /api/contractors/[id]/notify
- * Body: { mode?: 'email' | 'mark', item_ids?: string[], message?: string, include_others?: boolean }
+ * Body: { mode?: 'email' | 'outlook' | 'mark', item_ids?: string[], message?: string, include_others?: boolean }
  *
  *  - mode 'email' (default): email the contractor a summary of their pending
  *    items + portal link, then stamp those items as notified.
+ *  - mode 'outlook': same email, returned as an Outlook draft (.eml download) for the
+ *    user to send themselves, then stamp. For when app email sending is down.
  *  - mode 'mark': stamp them as notified without sending (e.g. told by phone).
  *
  * Only items the sender is responsible for (mh_item_responsible / effectiveResponsible)
@@ -104,7 +107,7 @@ export async function POST(
   const supabase = await createClient()
 
   const body = await req.json().catch(() => ({})) as { mode?: string; item_ids?: unknown; message?: unknown; include_others?: unknown }
-  const mode = body.mode === 'mark' ? 'mark' : 'email'
+  const mode = body.mode === 'mark' ? 'mark' : body.mode === 'outlook' ? 'outlook' : 'email'
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 4000) || null : null
   const onlyIds = Array.isArray(body.item_ids) ? new Set(body.item_ids.filter((x): x is string => typeof x === 'string')) : null
   const includeOthers = body.include_others === true && isAdmin(profile)
@@ -124,11 +127,12 @@ export async function POST(
     return Response.json({ error: 'No new items of yours to notify this contractor about' }, { status: 400 })
   }
 
-  if (mode === 'email') {
+  let draft: Buffer | null = null
+  if (mode === 'email' || mode === 'outlook') {
     if (!contractor.email) {
       return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
     }
-    if (!isEmailConfigured()) {
+    if (mode === 'email' && !isEmailConfigured()) {
       return Response.json({ error: 'Email sending is not configured (set SMTP_HOST on the server)' }, { status: 500 })
     }
 
@@ -152,16 +156,21 @@ export async function POST(
 
     // Replies go to whoever clicked Notify; EMAIL_REPLY_TO is a fallback for users without an email.
     // They're also CC'd so they have a copy of what was sent.
-    const replyTo = user.email ?? process.env.EMAIL_REPLY_TO
-    const { error: emailError } = await sendEmail({ to: contractor.email, cc: user.email, replyTo, subject, html, text })
-    if (emailError) return Response.json({ error: emailError }, { status: 500 })
+    if (mode === 'outlook') {
+      // Sent from the user's own Outlook, so it's in their Sent Items; no CC needed.
+      draft = await buildOutlookDraft({ to: [contractor.email], subject, html, text })
+    } else {
+      const replyTo = user.email ?? process.env.EMAIL_REPLY_TO
+      const { error: emailError } = await sendEmail({ to: contractor.email, cc: user.email, replyTo, subject, html, text })
+      if (emailError) return Response.json({ error: emailError }, { status: 500 })
+    }
   }
 
   const now = new Date().toISOString()
   const ids = items.map(i => i.id)
 
-  // Stamping contractor_notified_at also releases the items to the contractor's
-  // portal (trigger trg_maintenance_items_zz_portal_release).
+  // Generating an Outlook draft counts as notifying: the user sends it straight away
+  // from Outlook, and the items come off their "new" list like a sent email would.
   const { error: stampErr } = await supabase
     .from('maintenance_items')
     .update({ contractor_notified_at: now })
@@ -178,13 +187,25 @@ export async function POST(
     details: {
       contractor_id: contractor.id,
       contractor: contractor.company_name,
-      method: mode === 'email' ? 'email' : 'manual',
-      ...(mode === 'email' ? { to: contractor.email } : {}),
-      ...(mode === 'email' && message ? { message } : {}),
+      method: mode === 'mark' ? 'manual' : mode,
+      ...(mode !== 'mark' ? { to: contractor.email } : {}),
+      ...(mode !== 'mark' && message ? { message } : {}),
       ...(onBehalf.has(itemId) ? { on_behalf: true } : {}),
     },
     performed_by: user.email ?? 'admin',
   })))
+
+  if (draft) {
+    return new Response(new Uint8Array(draft), {
+      headers: {
+        'Content-Type': 'message/rfc822',
+        'Content-Disposition': attachmentDisposition(`Notify ${contractor.company_name.trim()}.eml`),
+        'Cache-Control': 'no-store',
+        // The items that were stamped, for the dialog (the body is the .eml).
+        'X-Item-Ids': ids.join(','),
+      },
+    })
+  }
 
   return Response.json({ success: true, count: ids.length, mode, item_ids: ids })
 }

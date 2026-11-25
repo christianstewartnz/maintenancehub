@@ -2,8 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Can this portal token act on this item? Same rule as the portal list
- * (get_portal_items_v2): the contractor's item, open, not archived/hidden, and
- * released (they've been told about it). Fails closed on any error.
+ * (get_portal_items_v2): the contractor's item, open, not archived and not hidden.
+ * Fails closed on any error.
  *
  * Returns a 403 Response to send back, or null if the item is visible.
  * Works with an anon or service-role client (portal_item_visible is security definer).

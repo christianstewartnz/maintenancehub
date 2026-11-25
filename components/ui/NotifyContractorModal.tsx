@@ -29,8 +29,10 @@ interface Props {
   items: PendingNotifyItem[]
   onClose: () => void
   /** Called after a successful send / mark, with the item ids that were stamped. */
-  onDone: (ids: string[], mode: 'email' | 'mark') => void
+  onDone: (ids: string[], mode: NotifyMode) => void
 }
+
+export type NotifyMode = 'email' | 'outlook' | 'mark'
 
 /**
  * Preview + confirm dialog for emailing a contractor about their new items.
@@ -40,7 +42,7 @@ interface Props {
  * "include" to send those too, on the other person's behalf.
  */
 export default function NotifyContractorModal({ contractor, items: myItems, onClose, onDone }: Props) {
-  const [busy, setBusy] = useState<'email' | 'mark' | null>(null)
+  const [busy, setBusy] = useState<NotifyMode | null>(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [others, setOthers] = useState<OthersSummary | null>(null)
@@ -58,7 +60,7 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
   const otherItems = others?.items ?? []
   const items = includeOthers ? [...myItems, ...otherItems] : myItems
 
-  async function run(mode: 'email' | 'mark') {
+  async function run(mode: NotifyMode) {
     setBusy(mode)
     setError('')
     const ids = items.map(i => i.id)
@@ -68,10 +70,29 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
       body: JSON.stringify({
         mode,
         item_ids: ids,
-        message: mode === 'email' ? message.trim() || undefined : undefined,
+        message: mode !== 'mark' ? message.trim() || undefined : undefined,
         include_others: includeOthers || undefined,
       }),
     })
+
+    if (mode === 'outlook' && res.ok) {
+      // The response is the .eml draft: download it so Outlook opens it, ready to send.
+      const blob = await res.blob()
+      const stamped = res.headers.get('X-Item-Ids')?.split(',').filter(Boolean) ?? ids
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Notify ${contractor.company_name.trim().replace(/[\\/:*?"<>|]+/g, '-')}.eml`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      setBusy(null)
+      window.dispatchEvent(new Event(COUNTS_CHANGED_EVENT))
+      onDone(stamped, mode)
+      return
+    }
+
     const json = await res.json().catch(() => ({}))
     setBusy(null)
     if (!res.ok) {
@@ -158,7 +179,7 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
                 placeholder="e.g. Please prioritise the leak at Unit 3 — owner is away from Friday."
                 style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
               />
-              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#787774' }}>Added near the top of the email, under the greeting.</p>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#787774' }}>Added near the top of the email, under the greeting. &ldquo;Generate Outlook email&rdquo; downloads the same email as a draft to send from your Outlook.</p>
             </div>
           )}
           {error &&<p style={{ color: '#e03131', fontSize: 14, margin: 0 }}>{error}</p>}
@@ -174,6 +195,14 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
             {busy === 'mark' ? 'Marking…' : 'Mark as told (no email)'}
           </button>
           <button className="btn btn-secondary" onClick={onClose} disabled={!!busy}>Cancel</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => run('outlook')}
+            disabled={!!busy || !contractor.email || n === 0}
+            title="Download this email as an Outlook draft to send from your own Outlook. The items are marked as notified."
+          >
+            <Mail size={14} /> {busy === 'outlook' ? 'Generating…' : 'Generate Outlook email'}
+          </button>
           <button className="btn btn-primary" onClick={() => run('email')} disabled={!!busy || !contractor.email || n === 0}>
             <Mail size={14} /> {busy === 'email' ? 'Sending…' : `Send email (${n})`}
           </button>

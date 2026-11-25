@@ -444,7 +444,12 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
               : i)))
             setLastNotifiedAt(now)
             setShowNotify(false)
-            setFlash(mode === 'email' ? `Emailed ${contractor.email} about ${ids.length} item${ids.length !== 1 ? 's' : ''}.` : `Marked ${ids.length} item${ids.length !== 1 ? 's' : ''} as told.`)
+            const s = ids.length !== 1 ? 's' : ''
+            setFlash(mode === 'email'
+              ? `Emailed ${contractor.email} about ${ids.length} item${s}.`
+              : mode === 'outlook'
+                ? `Outlook draft downloaded for ${ids.length} item${s}. Open it and press Send. The items are marked as notified.`
+                : `Marked ${ids.length} item${s} as told.`)
             router.refresh()
           }}
         />
