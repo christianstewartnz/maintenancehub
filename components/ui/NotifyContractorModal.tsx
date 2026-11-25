@@ -109,7 +109,7 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
 
   return (
     <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 620 }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 720 }}>
         <div className="modal-header">
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Notify {contractor.company_name}</h2>
           <button className="btn btn-ghost" style={{ padding: '4px 8px' }} onClick={onClose} disabled={!!busy}>✕</button>
@@ -184,10 +184,10 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
           )}
           {error &&<p style={{ color: '#e03131', fontSize: 14, margin: 0 }}>{error}</p>}
         </div>
-        <div className="modal-footer" style={{ alignItems: 'center' }}>
+        <div className="modal-footer" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 8, rowGap: 8 }}>
           <button
             className="btn btn-ghost"
-            style={{ fontSize: 13, color: '#787774', marginRight: 'auto' }}
+            style={{ fontSize: 13, color: '#787774', marginRight: 'auto', paddingLeft: 0, whiteSpace: 'nowrap' }}
             onClick={() => run('mark')}
             disabled={!!busy || n === 0}
             title="Clear these from the to-notify list without sending an email"
@@ -197,13 +197,14 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
           <button className="btn btn-secondary" onClick={onClose} disabled={!!busy}>Cancel</button>
           <button
             className="btn btn-secondary"
+            style={{ whiteSpace: 'nowrap' }}
             onClick={() => run('outlook')}
             disabled={!!busy || !contractor.email || n === 0}
             title="Download this email as an Outlook draft to send from your own Outlook. The items are marked as notified."
           >
             <Mail size={14} /> {busy === 'outlook' ? 'Generating…' : 'Generate Outlook email'}
           </button>
-          <button className="btn btn-primary" onClick={() => run('email')} disabled={!!busy || !contractor.email || n === 0}>
+          <button className="btn btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => run('email')} disabled={!!busy || !contractor.email || n === 0}>
             <Mail size={14} /> {busy === 'email' ? 'Sending…' : `Send email (${n})`}
           </button>
         </div>
