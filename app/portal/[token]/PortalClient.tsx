@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDateTime, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
-import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2, KeyRound } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2, KeyRound, Receipt } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import type { PhotoWithUrl } from '@/lib/photos'
 import { PORTAL_NEW_DAYS } from '@/lib/contractor-notify'
@@ -108,6 +108,155 @@ function ContactNote({ contact, style }: { contact: Contact; style?: React.CSSPr
   )
 }
 
+// ---------- Work order request ----------
+/** The contractor's latest work order request on an item (see work_order_requests). */
+type WoRequest = {
+  id: string
+  status: 'pending' | 'approved' | 'declined'
+  reason: string
+  estimated_cost: number | null
+  response_note: string | null
+  created_at: string
+  responded_at: string | null
+}
+
+function formatMoney(n: number) {
+  return `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/**
+ * Lets the contractor request a work order on an item, and shows how that request went.
+ */
+function WorkOrderRequestPanel({ item, token, onRequested }: { item: any; token: string; onRequested: (r: WoRequest) => void }) {
+  const request: WoRequest | null = item.wo_request ?? null
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState('')
+  const [cost, setCost] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+
+  // Already on a work order (drafts included): nothing to ask for.
+  if (item.work_order) return null
+
+  const box = (bg: string, border: string, color: string): React.CSSProperties => ({
+    marginBottom: 16, padding: '10px 12px', background: bg, border: `1px solid ${border}`, borderRadius: 6, fontSize: 13, color,
+  })
+  const quote = (text: string) => (
+    <p style={{ margin: '6px 0 0', whiteSpace: 'pre-wrap', color: '#37352f' }}>{text}</p>
+  )
+
+  if (request?.status === 'pending') {
+    return (
+      <div style={box('#fff8e6', '#f3e2b8', '#8a5a00')}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+          <Receipt size={13} /> Work order requested {formatDateTime(request.created_at)}
+        </div>
+        <div style={{ marginTop: 2 }}>Waiting for Stratum to review.{request.estimated_cost != null && ` Your estimate: ${formatMoney(request.estimated_cost)} + GST.`}</div>
+        {quote(request.reason)}
+      </div>
+    )
+  }
+
+  if (request?.status === 'approved') {
+    return (
+      <div style={box('#e8f5e9', '#cde7cf', '#2e7d32')}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+          <Receipt size={13} /> Work order request approved
+        </div>
+        <div style={{ marginTop: 2 }}>The work order will be sent to you shortly.</div>
+        {request.response_note && quote(request.response_note)}
+      </div>
+    )
+  }
+
+  async function submit() {
+    setSending(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/portal/${token}/request-work-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id, reason, estimated_cost: cost.trim() === '' ? null : cost }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.data) {
+        setError(json.error ?? `Request failed (${res.status})`)
+      } else {
+        onRequested(json.data)
+        setOpen(false)
+        setReason('')
+        setCost('')
+      }
+    } catch {
+      setError('Request failed — check your connection and try again')
+    }
+    setSending(false)
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {request?.status === 'declined' && (
+        <div style={box('#fbeeee', '#f1d4d4', '#a33a3a')}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+            <Receipt size={13} /> Work order request declined{request.responded_at ? ` ${formatDateTime(request.responded_at)}` : ''}
+          </div>
+          {request.response_note
+            ? quote(request.response_note)
+            : <div style={{ marginTop: 2 }}>Contact Stratum if you have any questions.</div>}
+        </div>
+      )}
+
+      {!open ? (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+          onClick={() => setOpen(true)}
+        >
+          <Receipt size={13} /> {request?.status === 'declined' ? 'Request work order again' : 'Request work order'}
+        </button>
+      ) : (
+        <div style={{ padding: '12px', background: '#f7f7f5', borderRadius: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#37352f', marginBottom: 4 }}>Request work order</div>
+          <p style={{ margin: '0 0 8px', fontSize: 12, color: '#787774' }}>
+            Stratum will review your request before you do the work.
+          </p>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', marginBottom: 4 }}>Reason</label>
+          <textarea
+            className="input"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Why are you requesting a work order for this item?"
+            style={{ minHeight: 70 }}
+            maxLength={2000}
+          />
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', margin: '8px 0 4px' }}>
+            Estimated cost, excl. GST <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
+          </label>
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={cost}
+            onChange={e => setCost(e.target.value)}
+            placeholder="$"
+            style={{ maxWidth: 180 }}
+          />
+          {error && <p style={{ margin: '8px 0 0', fontSize: 13, color: '#e03131' }}>{error}</p>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="btn btn-primary" disabled={!reason.trim() || sending} onClick={submit}>
+              {sending ? 'Sending…' : 'Send Request'}
+            </button>
+            <button className="btn btn-ghost" disabled={sending} onClick={() => { setOpen(false); setError('') }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---------- Item accordion ----------
 interface ItemProps {
   item: any
@@ -125,13 +274,15 @@ interface ItemProps {
   onPhotosChange: (photos: PhotoWithUrl[]) => void
   /** Show the item's contact here (false when the whole project has one contact, shown on the project). */
   showContact: boolean
+  token: string
+  onWoRequested: (r: WoRequest) => void
 }
 
 function ItemRow({
   item, isExpanded, onToggle,
   comment, onComment, onSubmitComment,
   onUpdateStatus, onSetScheduledDate, onUploadPhoto, onPhotosChange,
-  isStatusSubmitting, isCommentSubmitting, isDateSubmitting, showContact,
+  isStatusSubmitting, isCommentSubmitting, isDateSubmitting, showContact, token, onWoRequested,
 }: ItemProps) {
   const [localDate, setLocalDate] = useState(item.scheduled_date ?? '')
   const isDone = item.status === 'contractor_complete' || item.status === 'complete'
@@ -168,6 +319,11 @@ function ItemRow({
                 background: '#eef4ff', borderRadius: 4, padding: '1px 6px',
               }}>
                 {item.work_order.work_order_number}
+              </span>
+            )}
+            {!item.work_order && item.wo_request?.status === 'pending' && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#8a5a00', background: '#fff3d6', borderRadius: 4, padding: '1px 6px' }}>
+                WO requested
               </span>
             )}
             {item.comments?.length > 0 && (
@@ -249,6 +405,10 @@ function ItemRow({
                 {isStatusSubmitting ? 'Updating…' : 'Mark Complete'}
               </button>
             </div>
+          )}
+
+          {item.status !== 'contractor_complete' && (
+            <WorkOrderRequestPanel item={item} token={token} onRequested={onWoRequested} />
           )}
 
           {/* Scheduled date */}
@@ -652,6 +812,8 @@ export default function PortalClient({ contractor, items: initial, token }: Prop
                                     isCommentSubmitting={!!submitting[`comment-${item.id}`]}
                                     isDateSubmitting={!!submitting[`date-${item.id}`]}
                                     showContact={!projectContact}
+                                    token={token}
+                                    onWoRequested={r => setItems(prev => prev.map(i => i.id === item.id ? { ...i, wo_request: r } : i))}
                                     onUploadPhoto={(blob, name) => uploadPhoto(item.id, blob, name)}
                                     onPhotosChange={photos => setItems(prev => prev.map(i => i.id === item.id ? { ...i, attachments: photos } : i))}
                                   />

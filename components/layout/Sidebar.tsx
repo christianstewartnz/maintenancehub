@@ -38,11 +38,12 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [signOffCount, setSignOffCount] = useState(0)
   const [notifyCount, setNotifyCount] = useState(0)
+  const [woRequestCount, setWoRequestCount] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
     async function fetchCount() {
-      const [{ count }, { data: { session } }] = await Promise.all([
+      const [{ count }, { data: { session } }, { count: requestCount }] = await Promise.all([
         supabase
           .from('maintenance_items')
           .select('id', { count: 'exact', head: true })
@@ -50,8 +51,15 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           .eq('has_steps', false) // a job split into steps is signed off through its steps
           .is('archived_at', null),
         supabase.auth.getSession(),
+        // Contractor work order requests waiting for an answer (RLS: projects I can see)
+        supabase
+          .from('work_order_requests')
+          .select('id, item:maintenance_items!inner(archived_at)', { count: 'exact', head: true })
+          .eq('status', 'pending')
+          .is('item.archived_at', null),
       ])
       setSignOffCount(count ?? 0)
+      setWoRequestCount(requestCount ?? 0)
       // "To notify" is only the user's own items (effective responsible = me): that's what they can send.
       // getSession() is only used for the user id here, not to authorise anything (RLS does that).
       const userId = session?.user.id
@@ -63,6 +71,7 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
     const channel = supabase
       .channel('sidebar_signoff_count')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'maintenance_items' }, fetchCount)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'work_order_requests' }, fetchCount)
       .subscribe()
     // Realtime isn't guaranteed to fire for every change, so also refresh when the app says counts moved.
     window.addEventListener(COUNTS_CHANGED_EVENT, fetchCount)
@@ -133,9 +142,14 @@ export default function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
         <nav style={{ flex: 1, padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== '/' && pathname.startsWith(href))
-            const badgeCount = href === '/sign-off' ? signOffCount : href === '/contractors' ? notifyCount : 0
-            const badgeColor = href === '/contractors' ? '#2383e2' : '#e03c3c'
-            const badgeTitle = href === '/contractors' ? `${notifyCount} of your assigned item${notifyCount !== 1 ? 's' : ''} not yet emailed to contractors` : undefined
+            const badgeCount = href === '/sign-off' ? signOffCount
+              : href === '/contractors' ? notifyCount
+              : href === '/work-orders' ? woRequestCount
+              : 0
+            const badgeColor = href === '/contractors' ? '#2383e2' : href === '/work-orders' ? '#d9730d' : '#e03c3c'
+            const badgeTitle = href === '/contractors' ? `${notifyCount} of your assigned item${notifyCount !== 1 ? 's' : ''} not yet emailed to contractors`
+              : href === '/work-orders' ? `${woRequestCount} work order request${woRequestCount !== 1 ? 's' : ''} from contractors waiting for an answer`
+              : undefined
             const showBadge = badgeCount > 0
             return (
               <Link

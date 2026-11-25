@@ -19,9 +19,29 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
 
   // The bucket is private: sign every attachment's URL server-side (token already verified above).
   const list: any[] = (items as any) ?? []
-  const signed = await withSignedUrls(createServiceClient(), list.flatMap(i => i.attachments ?? []))
+  const service = createServiceClient()
+  const signed = await withSignedUrls(service, list.flatMap(i => i.attachments ?? []))
   const byId = new Map(signed.map(a => [a.id, a]))
-  const withPhotos = list.map(i => ({ ...i, attachments: (i.attachments ?? []).map((a: any) => byId.get(a.id) ?? a) }))
+
+  // This contractor's latest work order request on each item (pending / approved / declined).
+  const latestRequest = new Map<string, any>()
+  if (list.length) {
+    const { data: requests } = await service
+      .from('work_order_requests')
+      .select('id, maintenance_item_id, status, reason, estimated_cost, response_note, created_at, responded_at')
+      .eq('contractor_id', (contractor as any).id)
+      .in('maintenance_item_id', list.map(i => i.id))
+      .order('created_at', { ascending: false })
+    for (const r of requests ?? []) {
+      if (!latestRequest.has(r.maintenance_item_id)) latestRequest.set(r.maintenance_item_id, r)
+    }
+  }
+
+  const withPhotos = list.map(i => ({
+    ...i,
+    attachments: (i.attachments ?? []).map((a: any) => byId.get(a.id) ?? a),
+    wo_request: latestRequest.get(i.id) ?? null,
+  }))
 
   return (
     <PortalClient

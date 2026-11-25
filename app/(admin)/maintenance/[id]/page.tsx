@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import PageHeader from '@/components/layout/PageHeader'
 import ItemDetailClient from './ItemDetailClient'
 import { withSignedUrls } from '@/lib/photos'
-import { STEP_SELECT } from '@/lib/types'
+import { STEP_SELECT, WORK_ORDER_REQUEST_SELECT } from '@/lib/types'
 import { fetchProjectStaff } from '@/lib/staff'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +12,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
   const { id } = await params
   const supabase = await createClient()
 
-  const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes, updatesRes, usersRes, { data: { user } }] = await Promise.all([
+  const [itemRes, activityRes, commentsRes, attachmentsRes, contractorsRes, updatesRes, usersRes, { data: { user } }, woRequestsRes] = await Promise.all([
     supabase.from('maintenance_items').select(`
       id, item_number, title, description, status, created_at, updated_at, completed_at,
       contractor_id, trade_id, unit_id, assigned_to, scheduled_date, archived_at, parent_item_id, step_order, has_steps,
@@ -28,6 +28,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
     supabase.from('item_updates').select('*').eq('maintenance_item_id', id).order('created_at', { ascending: false }),
     supabase.from('profiles').select('id, email, full_name').order('full_name', { nullsFirst: false }).order('email'),
     supabase.auth.getUser(),
+    supabase.from('work_order_requests').select(WORK_ORDER_REQUEST_SELECT).eq('maintenance_item_id', id).order('created_at', { ascending: false }),
   ])
 
   if (!itemRes.data) notFound()
@@ -75,6 +76,7 @@ export default async function MaintenanceItemPage({ params }: { params: Promise<
         users={usersRes.data ?? []}
         projectStaff={projectStaff}
         currentUserId={user?.id ?? ''}
+        woRequests={(woRequestsRes.data ?? []) as any}
       />
     </div>
   )

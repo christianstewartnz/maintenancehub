@@ -97,6 +97,29 @@ export interface WorkOrder {
   contractor?: Contractor
 }
 
+export type WorkOrderRequestStatus = 'pending' | 'approved' | 'declined'
+
+/** A contractor requesting (from the portal) a work order on an item. */
+export interface WorkOrderRequest {
+  id: string
+  maintenance_item_id: string
+  contractor_id: string
+  reason: string
+  /** Contractor's estimate excl. GST, optional. */
+  estimated_cost: number | null
+  status: WorkOrderRequestStatus
+  /** Staff note to the contractor (shown on the portal), mainly when declined. */
+  response_note: string | null
+  responded_by: string | null
+  responded_at: string | null
+  work_order_id: string | null
+  created_at: string
+  contractor?: { id: string; company_name: string } | null
+  work_order?: { id: string; work_order_number: string } | null
+}
+
+export const WORK_ORDER_REQUEST_SELECT = '*, contractor:contractors(id, company_name), work_order:work_orders(id, work_order_number)'
+
 export interface MaintenanceItem {
   id: string
   item_number: string

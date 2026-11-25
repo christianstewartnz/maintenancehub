@@ -13,7 +13,8 @@ import { primaryContactId, projectStaffProfiles } from '@/lib/staff'
 import { Pencil, Mail, CheckCircle2, RotateCcw, Archive, ArchiveRestore } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
 import { ATTACHMENTS_BUCKET, SIGNED_URL_TTL_SECONDS, photoStoragePath, type PhotoWithUrl } from '@/lib/photos'
-import type { PhotoType } from '@/lib/types'
+import type { PhotoType, WorkOrderRequest } from '@/lib/types'
+import WorkOrderRequestBanner from './WorkOrderRequestBanner'
 
 interface Props {
   item: MaintenanceItem & { unit: any; trade: any; contractor: any; work_order: any }
@@ -34,9 +35,11 @@ interface Props {
   /** This item's project staff: the Responsible choices and the main contact. */
   projectStaff: ProjectStaff[]
   currentUserId: string
+  /** Contractor work order requests on this item, newest first. */
+  woRequests: WorkOrderRequest[]
 }
 
-export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, tradeAssignments, steps, parent, users, projectStaff, currentUserId }: Props) {
+export default function ItemDetailClient({ item: initial, activity: initialActivity, comments: initialComments, updates, attachments, contractors, trades, tradeAssignments, steps, parent, users, projectStaff, currentUserId, woRequests }: Props) {
   const [item, setItem] = useState(initial)
   const [stepsKey, setStepsKey] = useState(0)
   const isStep = !!item.parent_item_id
@@ -282,6 +285,13 @@ export default function ItemDetailClient({ item: initial, activity: initialActiv
               </div>
             )}
         </div>
+
+        <WorkOrderRequestBanner
+          item={{ id: item.id, contractor_id: item.contractor_id, work_order_id: workOrder?.id ?? null, unit: item.unit }}
+          requests={woRequests}
+          currentUserId={currentUserId}
+          actorName={(() => { const me = users.find(u => u.id === currentUserId); return me ? profileName(me) : 'admin' })()}
+        />
 
         {/* Status: a job split into steps follows its steps; it can only be signed off as a whole */}
         {isJob && item.status !== 'complete' ? (
@@ -693,6 +703,9 @@ function formatActivityLog(log: ActivityLog): string {
     case 'status_changed': return `changed status from ${STATUS_LABELS[d?.from as MaintenanceStatus] ?? d?.from} to ${STATUS_LABELS[d?.to as MaintenanceStatus] ?? d?.to}`
     case 'contractor_assigned': return 'assigned contractor'
     case 'work_order_added': return 'added to work order'
+    case 'work_order_requested': return `requested a work order${d?.estimated_cost != null ? ` — estimate $${Number(d.estimated_cost).toFixed(2)} + GST` : ''}`
+    case 'work_order_request_approved': return `approved ${d?.contractor ?? 'the contractor'}'s work order request`
+    case 'work_order_request_declined': return `declined ${d?.contractor ?? 'the contractor'}'s work order request${d?.note ? ` (“${d.note}”)` : ''}`
     case 'contractor_notified': return d?.method === 'email'
       ? `emailed ${d?.contractor ?? 'the contractor'} about this item`
       : `marked ${d?.contractor ?? 'the contractor'} as told about this item`

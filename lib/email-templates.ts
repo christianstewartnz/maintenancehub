@@ -241,6 +241,40 @@ export function contractorCompleteEmail(opts: {
   }
 }
 
+/** A contractor requested a work order from the portal. */
+export function workOrderRequestEmail(opts: {
+  itemTitle: string
+  itemNumber: string
+  /** Pre-formatted with formatUnitLabel (unit number + address). */
+  unitLabel: string
+  projectName: string
+  contractorName: string
+  reason: string
+  estimatedCost: number | null
+  appUrl: string
+  itemId: string
+}): { subject: string; html: string } {
+  const { itemTitle, itemNumber, unitLabel, projectName, contractorName, reason, estimatedCost, appUrl, itemId } = opts
+  const cost = estimatedCost != null
+    ? `<p style="margin: 12px 0 0;"><strong>Estimated cost:</strong> $${estimatedCost.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + GST</p>`
+    : ''
+  return {
+    subject: `Work order requested by ${contractorName} — ${itemNumber} (${unitLabel})`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px; color: #37352f;">
+        <h2 style="margin-bottom: 4px;">Work Order Requested</h2>
+        <p style="color: #787774; margin-top: 0;">${esc(projectName)} · ${esc(unitLabel)}</p>
+        <hr style="border: none; border-top: 1px solid #e9e9e7; margin: 20px 0;" />
+        <p><strong>${esc(contractorName)}</strong> has requested a work order for <strong>${esc(itemNumber)} — ${esc(itemTitle)}</strong>:</p>
+        <blockquote style="margin: 0; padding: 12px 16px; background: #f7f7f5; border-left: 3px solid #e9e9e7; border-radius: 0 6px 6px 0; white-space: pre-wrap; font-size: 14px;">${esc(reason)}</blockquote>
+        ${cost}
+        <p style="color: #787774; font-size: 13px;">Open the item to create a work order or decline the request.</p>
+        <a href="${appUrl}/maintenance/${itemId}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin-top: 8px;">Review Request</a>
+      </div>
+    `,
+  }
+}
+
 export function contractorCommentEmail(opts: {
   itemTitle: string
   itemNumber: string
