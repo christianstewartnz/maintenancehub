@@ -107,6 +107,8 @@ export interface WorkOrderRequest {
   reason: string
   /** Contractor's estimate excl. GST, optional. */
   estimated_cost: number | null
+  /** Contractor's estimate of hours, optional (for a group: all items together). */
+  estimated_hours: number | null
   status: WorkOrderRequestStatus
   /** Staff note to the contractor (shown on the portal), mainly when declined. */
   response_note: string | null

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import PageHeader from '@/components/layout/PageHeader'
 import Link from 'next/link'
 import { WorkOrderStatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate, formatUnitLabel } from '@/lib/utils'
+import { formatDate, formatHours, formatUnitLabel } from '@/lib/utils'
 import { Plus, Receipt } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -17,7 +17,7 @@ export default async function WorkOrdersPage() {
     // Contractors asking for a work order from the portal, waiting for an answer (RLS: projects I can see)
     supabase
       .from('work_order_requests')
-      .select(`id, group_id, reason, estimated_cost, created_at,
+      .select(`id, group_id, reason, estimated_cost, estimated_hours, created_at,
         contractor:contractors(id, company_name),
         item:maintenance_items!inner(id, item_number, title, archived_at, unit:units(unit_identifier, address, project:projects(name)))`)
       .eq('status', 'pending')
@@ -78,7 +78,11 @@ export default async function WorkOrdersPage() {
                       </td>
                       <td>{(r.contractor as any)?.company_name ?? '—'}</td>
                       <td className="wrap-mobile" style={{ fontSize: 13, color: '#37352f', maxWidth: 360, whiteSpace: 'pre-wrap' }}>{r.reason}</td>
-                      <td style={{ fontSize: 13 }}>{r.estimated_cost != null ? `$${Number(r.estimated_cost).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+                      <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                        {r.estimated_cost == null && r.estimated_hours == null && '—'}
+                        {r.estimated_hours != null && <div>{formatHours(r.estimated_hours)}</div>}
+                        {r.estimated_cost != null && <div>${Number(r.estimated_cost).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>}
+                      </td>
                       <td style={{ fontSize: 13, color: '#787774' }}>{formatDate(r.created_at)}</td>
                     </tr>
                   )

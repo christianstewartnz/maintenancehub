@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
+import { formatDateTime, formatHours, formatUnitLabel, summariseUnitItems } from '@/lib/utils'
 import type { MaintenanceStatus, PhotoType } from '@/lib/types'
 import { ChevronDown, ChevronUp, MessageSquare, FileText, Wrench, User, Phone, Mail, MapPin, Camera, Calendar, Clock, CheckCircle2, KeyRound, Receipt } from 'lucide-react'
 import ItemPhotos from '@/components/ui/ItemPhotos'
@@ -118,6 +118,7 @@ type WoRequest = {
   status: 'pending' | 'approved' | 'declined'
   reason: string
   estimated_cost: number | null
+  estimated_hours?: number | null
   response_note: string | null
   created_at: string
   responded_at: string | null
@@ -125,6 +126,14 @@ type WoRequest = {
 
 function formatMoney(n: number) {
   return `$${Number(n).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/** "3 hours, $450.00 + GST" from whichever estimates were given; '' if none. */
+function estimateText(r: WoRequest): string {
+  return [
+    r.estimated_hours != null ? formatHours(r.estimated_hours) : '',
+    r.estimated_cost != null ? `${formatMoney(r.estimated_cost)} + GST` : '',
+  ].filter(Boolean).join(', ')
 }
 
 /** Can this item go on a new work order request? (Not on a work order, not already asked for, not finished.) */
@@ -165,7 +174,7 @@ function WorkOrderRequestPanel({ item, siblings, onStartRequest }: { item: any; 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
           <Receipt size={13} /> Work order requested {formatDateTime(request.created_at)}
         </div>
-        <div style={{ marginTop: 2 }}>Waiting for Stratum to review.{request.estimated_cost != null && ` Your estimate: ${formatMoney(request.estimated_cost)} + GST.`}</div>
+        <div style={{ marginTop: 2 }}>Waiting for Stratum to review.{estimateText(request) && ` Your estimate: ${estimateText(request)}.`}</div>
         {togetherNote}
         {quote(request.reason)}
       </div>
@@ -223,6 +232,7 @@ function UnitWorkOrderRequest({ items, initialIds, token, onRequested, onClose }
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialIds.filter(id => items.some(i => i.id === id))))
   const [reason, setReason] = useState('')
   const [cost, setCost] = useState('')
+  const [hours, setHours] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -245,7 +255,7 @@ function UnitWorkOrderRequest({ items, initialIds, token, onRequested, onClose }
       const res = await fetch(`/api/portal/${token}/request-work-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_ids: Array.from(selected), reason, estimated_cost: cost.trim() === '' ? null : cost }),
+        body: JSON.stringify({ item_ids: Array.from(selected), reason, estimated_cost: cost.trim() === '' ? null : cost, estimated_hours: hours.trim() === '' ? null : hours }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !Array.isArray(json.data)) {
@@ -300,20 +310,41 @@ function UnitWorkOrderRequest({ items, initialIds, token, onRequested, onClose }
         style={{ minHeight: 70 }}
         maxLength={2000}
       />
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', margin: '8px 0 4px' }}>
-        Estimated cost{selected.size > 1 ? ' for all items' : ''}, excl. GST <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
-      </label>
-      <input
-        className="input"
-        type="number"
-        inputMode="decimal"
-        min="0"
-        step="0.01"
-        value={cost}
-        onChange={e => setCost(e.target.value)}
-        placeholder="$"
-        style={{ maxWidth: 180 }}
-      />
+      {selected.size > 1 && (
+        <p style={{ margin: '8px 0 0', fontSize: 12, color: '#787774' }}>Estimates are for all the ticked items together.</p>
+      )}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8, alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 160px', maxWidth: 200 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', marginBottom: 4 }}>
+            Estimated hours <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
+          </label>
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.25"
+            value={hours}
+            onChange={e => setHours(e.target.value)}
+            placeholder="hrs"
+          />
+        </div>
+        <div style={{ flex: '1 1 160px', maxWidth: 200 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#37352f', marginBottom: 4 }}>
+            Estimated cost, excl. GST <span style={{ fontWeight: 400, color: '#787774' }}>(optional)</span>
+          </label>
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={cost}
+            onChange={e => setCost(e.target.value)}
+            placeholder="$"
+          />
+        </div>
+      </div>
       {error && <p style={{ margin: '8px 0 0', fontSize: 13, color: '#e03131' }}>{error}</p>}
       <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         <button className="btn btn-primary" disabled={!reason.trim() || selected.size === 0 || sending} onClick={submit}>

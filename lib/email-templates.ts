@@ -1,4 +1,4 @@
-import { formatUnitLabel } from '@/lib/utils'
+import { formatUnitLabel, formatHours } from '@/lib/utils'
 
 export function maintenanceDueEmail(opts: {
   upcomingUnits: { unitId: string; hasOwnerEmail: boolean; unitLabel: string; projectName: string; settlementDate: string; dueDate: string; daysUntilDue: number }[]
@@ -251,13 +251,18 @@ export function workOrderRequestEmail(opts: {
   contractorName: string
   reason: string
   estimatedCost: number | null
+  estimatedHours: number | null
   appUrl: string
   /** Item the Review button opens (any item in the request shows the whole request). */
   itemId: string
 }): { subject: string; html: string } {
-  const { items, unitLabel, projectName, contractorName, reason, estimatedCost, appUrl, itemId } = opts
+  const { items, unitLabel, projectName, contractorName, reason, estimatedCost, estimatedHours, appUrl, itemId } = opts
+  const all = items.length > 1 ? ' (all items)' : ''
   const cost = estimatedCost != null
-    ? `<p style="margin: 12px 0 0;"><strong>Estimated cost${items.length > 1 ? ' (all items)' : ''}:</strong> $${estimatedCost.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + GST</p>`
+    ? `<p style="margin: 12px 0 0;"><strong>Estimated cost${all}:</strong> $${estimatedCost.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + GST</p>`
+    : ''
+  const hours = estimatedHours != null
+    ? `<p style="margin: ${cost ? 4 : 12}px 0 0;"><strong>Estimated time${all}:</strong> ${formatHours(estimatedHours)}</p>`
     : ''
   const single = items.length === 1
   const itemsHtml = single
@@ -273,6 +278,7 @@ export function workOrderRequestEmail(opts: {
         <p><strong>${esc(contractorName)}</strong> has requested a work order for ${itemsHtml}:</p>
         <blockquote style="margin: 0; padding: 12px 16px; background: #f7f7f5; border-left: 3px solid #e9e9e7; border-radius: 0 6px 6px 0; white-space: pre-wrap; font-size: 14px;">${esc(reason)}</blockquote>
         ${cost}
+        ${hours}
         <p style="color: #787774; font-size: 13px;">Open the item to create a work order or decline the request.</p>
         <a href="${appUrl}/maintenance/${itemId}" style="display: inline-block; background: #2383e2; color: white; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin-top: 8px;">Review Request</a>
       </div>

@@ -13,7 +13,7 @@ const MAX_ITEMS = 50
 /**
  * A contractor requests one work order for one or more of their portal items.
  * All items must be on the same unit.
- * Body: { item_ids: string[], reason, estimated_cost? }  (or the older { item_id, … })
+ * Body: { item_ids: string[], reason, estimated_cost?, estimated_hours? }  (or the older { item_id, … })
  *
  * Each item gets its own work_order_requests row; rows sent together share a group_id
  * so staff answer them as one request.
@@ -26,6 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
   const rawCost = body?.estimated_cost
   const estimatedCost = rawCost === null || rawCost === undefined || rawCost === '' ? null : Number(rawCost)
+  const rawHours = body?.estimated_hours
+  const estimatedHours = rawHours === null || rawHours === undefined || rawHours === '' ? null : Number(rawHours)
 
   if (!itemIds.length) return NextResponse.json({ error: 'Choose at least one item.' }, { status: 400 })
   if (itemIds.length > MAX_ITEMS) return NextResponse.json({ error: 'Too many items in one request.' }, { status: 400 })
@@ -33,6 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (reason.length > MAX_REASON) return NextResponse.json({ error: 'Reason is too long.' }, { status: 400 })
   if (estimatedCost !== null && (!Number.isFinite(estimatedCost) || estimatedCost < 0 || estimatedCost > 10_000_000)) {
     return NextResponse.json({ error: 'Estimated cost must be a positive number.' }, { status: 400 })
+  }
+  if (estimatedHours !== null && (!Number.isFinite(estimatedHours) || estimatedHours < 0 || estimatedHours > 100_000)) {
+    return NextResponse.json({ error: 'Estimated hours must be a positive number.' }, { status: 400 })
   }
 
   const supabase = createServiceClient()
@@ -67,6 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   const cost = estimatedCost === null ? null : Math.round(estimatedCost * 100) / 100
+  const hours = estimatedHours === null ? null : Math.round(estimatedHours * 100) / 100
   // Single-item requests keep group_id null, like the ones made before grouping existed.
   const groupId = items.length > 1 ? randomUUID() : null
 
@@ -78,9 +84,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       contractor_id: contractor.id,
       reason,
       estimated_cost: cost,
+      estimated_hours: hours,
       group_id: groupId,
     })))
-    .select('id, maintenance_item_id, group_id, status, reason, estimated_cost, response_note, created_at, responded_at')
+    .select('id, maintenance_item_id, group_id, status, reason, estimated_cost, estimated_hours, response_note, created_at, responded_at')
 
   if (error || !requests) {
     // work_order_requests_one_pending
@@ -99,6 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     details: {
       contractor: contractor.company_name,
       estimated_cost: cost,
+      estimated_hours: hours,
       ...(items.length > 1 ? { with_items: otherNumbers(i.id) } : {}),
     },
     performed_by: contractor.company_name,
@@ -118,6 +126,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
           contractorName: contractor.company_name,
           reason,
           estimatedCost: cost,
+          estimatedHours: hours,
           appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
           itemId: items[0].id,
         })

@@ -6,6 +6,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** "1 hour", "2.5 hours" (contractor estimates on work order requests). */
+export function formatHours(n: number) {
+  const v = Number(n)
+  return `${v.toLocaleString('en-NZ', { maximumFractionDigits: 2 })} hour${v === 1 ? '' : 's'}`
+}
+
 export function formatDate(date: string) {
   return new Date(date).toLocaleDateString('en-NZ', {
     day: 'numeric',

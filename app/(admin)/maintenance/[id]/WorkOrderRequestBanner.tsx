@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Receipt } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, formatHours } from '@/lib/utils'
 import type { WorkOrderRequest } from '@/lib/types'
 import { COUNTS_CHANGED_EVENT } from '@/lib/contractor-notify'
 
@@ -174,8 +174,14 @@ export default function WorkOrderRequestBanner({ item, requests, currentUserId, 
       <blockquote style={{ margin: '10px 0 0', padding: '8px 12px', background: 'white', borderLeft: '3px solid #f3e2b8', borderRadius: '0 6px 6px 0', fontSize: 14, color: '#37352f', whiteSpace: 'pre-wrap' }}>
         {pending.reason}
       </blockquote>
-      {pending.estimated_cost != null && (
-        <p style={{ margin: '8px 0 0', fontSize: 13, color: '#37352f' }}><strong>Estimate{multi ? ' (all items)' : ''}:</strong> {money(pending.estimated_cost)} + GST</p>
+      {(pending.estimated_hours != null || pending.estimated_cost != null) && (
+        <p style={{ margin: '8px 0 0', fontSize: 13, color: '#37352f' }}>
+          <strong>Estimate{multi ? ' (all items)' : ''}:</strong>{' '}
+          {[
+            pending.estimated_hours != null ? formatHours(pending.estimated_hours) : '',
+            pending.estimated_cost != null ? `${money(pending.estimated_cost)} + GST` : '',
+          ].filter(Boolean).join(' · ')}
+        </p>
       )}
       {itemList}
       {otherContractor && (
