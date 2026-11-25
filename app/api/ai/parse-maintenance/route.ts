@@ -76,8 +76,10 @@ Parse the following text and return a JSON array of maintenance items. Each item
 - unit_id: the id of the matching unit from the list above, matched by unit number or street address (or null if unclear)
 - unit_hint: the unit number or street address as mentioned in the text (or null if none)
 - title: short title of the issue (max 60 chars)
-- description: more detailed description (or null if none)
+- description: 1–2 short plain sentences for the contractor: what is wrong, where, and what needs doing (or null if none)
 - trade_hint: the most likely trade from the available list (or null if unclear)
+
+Contractors see the title and description, so keep them to the job only. Never include owner/tenant names, phone numbers, email addresses, who reported it, email subjects or dates, follow-up history, or the owner's backstory.
 
 Return ONLY a valid JSON array, no other text.
 

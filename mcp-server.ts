@@ -896,15 +896,24 @@ server.tool(
 
 server.tool(
   'create_maintenance_item',
-  'Create a new maintenance item on a unit. Find the unit_id with list_units (search by unit number or street address).',
+  'Create a new maintenance item on a unit. Find the unit_id with list_units (search by unit number or street address). ' +
+    'The title and description are CONTRACTOR-FACING (portal and Notify emails): keep them to the job only — what is wrong, where, and what needs doing — in 1–2 short plain sentences. ' +
+    'Never put owner/tenant names, phone numbers, email addresses, "Logged from…"/"Source:" lines, email subjects or dates, follow-up history or the owner\'s backstory in them. ' +
+    'When the item comes from an email, put all of that in source_note (plus the email_* fields) instead: it is saved as an internal email update contractors never see.',
   {
     unit_id: z.string().describe('Unit ID (from list_units — search by unit number or street address)'),
-    title: z.string().describe('Short title of the issue'),
-    description: z.string().optional(),
+    title: z.string().describe('Short title in the style "Location - issue", e.g. "Stairwell divider - stripped screws"'),
+    description: z.string().optional().describe('Contractor-facing job details only, e.g. "Divider on the stairwell has multiple stripped screws - replace the screws so the divider can be removed and refitted." No names, phone numbers, email references or dates.'),
     trade_id: z.string().optional().describe('Trade ID if known (from list_trades)'),
     hidden_from_portal: z.boolean().optional().describe('true to keep the item out of the contractor portal (and Notify emails) until shown, e.g. a list logged before the inspection. Default: shown.'),
+    source_note: z.string().optional().describe('Internal only (never shown to contractors): where the item came from and any background, e.g. \'Logged from owner email "Minor issues 6/32 Kaihuia St" from Jan Holliday (027 707 0377), 9 Jun 2026, followed up 28 Sep 2026.\' Saved to the item\'s Email updates.'),
+    email_message_id: z.string().optional().describe('Outlook message id of the source email, if any'),
+    email_subject: z.string().optional(),
+    email_from: z.string().optional(),
+    email_to: z.string().optional(),
+    email_date: z.string().optional().describe('ISO timestamp the source email was sent/received'),
   },
-  async ({ unit_id, title, description, trade_id, hidden_from_portal }) => {
+  async ({ unit_id, title, description, trade_id, hidden_from_portal, source_note, email_message_id, email_subject, email_from, email_to, email_date }) => {
     // Auto-assign the project's contractor for the trade, if it has one
     const contractorId = trade_id ? await defaultContractorForTrade(trade_id) : null
     const { data, error } = await supabase
@@ -920,13 +929,30 @@ server.tool(
 
     if (error) return { content: [{ type: 'text', text: `Error: ${error.message}` }] }
     const c = (data.contractor as any)?.company_name
-    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status})${c ? ` → ${c}` : ''} | Unit ${unitLabel(data.unit as any, '?')}${data.portal_hidden ? ' | HIDDEN from portal' : ''}` }] }
+
+    // Source details go to the internal Email updates, never the description
+    let sourceLine = ''
+    if (source_note?.trim()) {
+      const { error: srcErr } = await supabase.rpc('apply_email_update', {
+        p_item_number: data.item_number,
+        p_note: source_note,
+        p_new_status: null,
+        p_contractor_email: null,
+        p_email_message_id: email_message_id ?? null,
+        p_email_subject: email_subject ?? null,
+        p_email_from: email_from ?? null,
+        p_email_to: email_to ?? null,
+        p_email_date: email_date ?? null,
+      })
+      sourceLine = srcErr ? ` | Source note NOT saved: ${srcErr.message}` : ' | Source saved to Email updates'
+    }
+    return { content: [{ type: 'text', text: `Created ${data.item_number} — ${data.title} (${data.status})${c ? ` → ${c}` : ''} | Unit ${unitLabel(data.unit as any, '?')}${data.portal_hidden ? ' | HIDDEN from portal' : ''}${sourceLine}` }] }
   },
 )
 
 server.tool(
   'update_maintenance_item',
-  'Edit a maintenance item\'s title, description, trade, or contractor-portal visibility',
+  'Edit a maintenance item\'s title, description, trade, or contractor-portal visibility. Title and description are contractor-facing: job details only, no owner names, phone numbers, email references or dates (use apply_email_update for those).',
   {
     item_number: z.string().describe('Item number e.g. "MH-0042"'),
     title: z.string().optional(),
