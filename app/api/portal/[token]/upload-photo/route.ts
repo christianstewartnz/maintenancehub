@@ -40,7 +40,7 @@ export async function POST(
     .eq('id', itemId).eq('contractor_id', contractor.id).maybeSingle()
   if (!item) return Response.json({ error: 'Item not found' }, { status: 404 })
   if (item.status === 'complete') return Response.json({ error: 'This item is already signed off' }, { status: 400 })
-  // Only items shown on their portal (open, not hidden).
+  // Only items shown on their portal (released, open, not hidden).
   const refused = await refuseIfNotVisible(supabase, token, item.id)
   if (refused) return refused
 

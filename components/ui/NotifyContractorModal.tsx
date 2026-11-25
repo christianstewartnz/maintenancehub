@@ -47,12 +47,18 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
   const [message, setMessage] = useState('')
   const [others, setOthers] = useState<OthersSummary | null>(null)
   const [includeOthers, setIncludeOthers] = useState(false)
+  // Main email + extra contacts' emails (from the API); the main email until it loads.
+  const [recipients, setRecipients] = useState<string[]>(contractor.email ? [contractor.email] : [])
 
   useEffect(() => {
     let cancelled = false
     fetch(`/api/contractors/${contractor.id}/notify`)
       .then(res => (res.ok ? res.json() : null))
-      .then(json => { if (!cancelled && json?.others) setOthers(json.others) })
+      .then(json => {
+        if (cancelled || !json) return
+        if (json.others) setOthers(json.others)
+        if (Array.isArray(json.recipients)) setRecipients(json.recipients)
+      })
       .catch(() => {})
     return () => { cancelled = true }
   }, [contractor.id])
@@ -118,8 +124,8 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
           <p style={{ margin: 0, fontSize: 14, color: '#37352f' }}>
             {n === 0
               ? <>You have no new items to send this contractor.</>
-              : contractor.email
-                ? <>An email listing these <strong>{n} new item{n !== 1 ? 's' : ''}</strong> and their portal link will be sent to <strong>{contractor.email}</strong>, with a copy to you. You&apos;ll be shown as their contact.</>
+              : recipients.length
+                ? <>An email listing these <strong>{n} new item{n !== 1 ? 's' : ''}</strong> and their portal link will be sent to <strong>{recipients.join(', ')}</strong>, with a copy to you. You&apos;ll be shown as their contact.</>
                 : <>This contractor has <strong>no email address</strong>. Add one to email them, or mark these items as told if you&apos;ve let them know another way.</>}
           </p>
           {n > 0 && (
@@ -163,7 +169,7 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
               )}
             </div>
           )}
-          {contractor.email && n > 0 && (
+          {recipients.length > 0 && n > 0 && (
             <div>
               <label htmlFor="notify-message" style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 5 }}>
                 Note to contractor <span style={{ color: '#787774', fontWeight: 400 }}>(optional)</span>
@@ -199,12 +205,12 @@ export default function NotifyContractorModal({ contractor, items: myItems, onCl
             className="btn btn-secondary"
             style={{ whiteSpace: 'nowrap' }}
             onClick={() => run('outlook')}
-            disabled={!!busy || !contractor.email || n === 0}
+            disabled={!!busy || !recipients.length || n === 0}
             title="Download this email as an Outlook draft to send from your own Outlook. The items are marked as notified."
           >
             <Mail size={14} /> {busy === 'outlook' ? 'Generating…' : 'Generate Outlook email'}
           </button>
-          <button className="btn btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => run('email')} disabled={!!busy || !contractor.email || n === 0}>
+          <button className="btn btn-primary" style={{ whiteSpace: 'nowrap' }} onClick={() => run('email')} disabled={!!busy || !recipients.length || n === 0}>
             <Mail size={14} /> {busy === 'email' ? 'Sending…' : `Send email (${n})`}
           </button>
         </div>

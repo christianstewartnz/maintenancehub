@@ -446,7 +446,7 @@ export default function ContractorDetailClient({ contractor: initial, contacts, 
             setShowNotify(false)
             const s = ids.length !== 1 ? 's' : ''
             setFlash(mode === 'email'
-              ? `Emailed ${contractor.email} about ${ids.length} item${s}.`
+              ? `Emailed ${contractor.company_name} about ${ids.length} item${s}.`
               : mode === 'outlook'
                 ? `Outlook draft downloaded for ${ids.length} item${s}. Open it and press Send. The items are marked as notified.`
                 : `Marked ${ids.length} item${s} as told.`)

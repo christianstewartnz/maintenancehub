@@ -24,6 +24,44 @@ interface PendingItem {
 const EMAIL_SELECT =
   'id, item_number, title, assigned_to, parent_item_id, unit:units(project_id, unit_identifier, address, project:projects(name), owners:unit_owners(name, email, phone))'
 
+type Client = Awaited<ReturnType<typeof createClient>>
+
+/**
+ * Everyone a Notify goes to: the contractor's main email plus each extra contact's
+ * email (contractor_contacts), deduplicated, in one email. `greeting` is their first
+ * names ("Dave and Sam"), or null if none are known.
+ */
+async function contractorRecipients(
+  supabase: Client,
+  contractor: { id: string; email: string | null; contact_name: string | null },
+): Promise<{ emails: string[]; greeting: string | null }> {
+  const { data: contacts } = await supabase
+    .from('contractor_contacts')
+    .select('name, email, created_at')
+    .eq('contractor_id', contractor.id)
+    .order('created_at')
+  const people = [
+    { name: contractor.contact_name, email: contractor.email },
+    ...((contacts ?? []) as { name: string | null; email: string | null }[]),
+  ]
+
+  const emails: string[] = []
+  const firstNames: string[] = []
+  for (const p of people) {
+    // A cell may hold several addresses ("a@x.nz; b@x.nz").
+    const addrs = (p.email ?? '').split(/[;,\s]+/).map(e => e.trim()).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))
+    const fresh = addrs.filter(e => !emails.some(x => x.toLowerCase() === e.toLowerCase()))
+    emails.push(...fresh)
+    const first = p.name?.trim().split(/\s+/)[0]
+    // Greet people who receive it (or the main contact, who always appears first).
+    if (first && (fresh.length || p === people[0]) && !firstNames.includes(first)) firstNames.push(first)
+  }
+  const greeting = firstNames.length <= 1
+    ? firstNames[0] ?? null
+    : `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}`
+  return { emails, greeting }
+}
+
 /** "Christian Stewart", else the email's local part. */
 function displayName(p: { full_name: string | null; email: string | null } | undefined): string {
   return p?.full_name?.trim() || p?.email?.split('@')[0] || 'Unknown'
@@ -47,9 +85,13 @@ export async function GET(
   const guard = await requireUser()
   if (guard.error) return guard.error
   const me = guard.session.user.id
+  const supabase = await createClient()
+
+  // Who the email / Outlook draft will go to, for the dialog.
+  const { data: contractor } = await supabase.from('contractors').select('id, email, contact_name').eq('id', id).single()
+  const recipients = contractor ? (await contractorRecipients(supabase, contractor)).emails : []
 
   if (isAdmin(guard.session.profile)) {
-    const supabase = await createClient()
     const { others, error } = await fetchMyPendingNotify(supabase, me, { select: PENDING_NOTIFY_SELECT, contractorId: id })
     if (error) return Response.json({ error }, { status: 500 })
 
@@ -64,6 +106,7 @@ export async function GET(
     for (const o of others) counts.set(nameOf(o.responsible_id), (counts.get(nameOf(o.responsible_id)) ?? 0) + 1)
 
     return Response.json({
+      recipients,
       others: {
         count: others.length,
         people: Array.from(counts, ([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
@@ -74,7 +117,7 @@ export async function GET(
 
   const { others, error } = await fetchMyPendingNotify(createServiceClient(), me, { contractorId: id })
   if (error) return Response.json({ error }, { status: 500 })
-  return Response.json({ others: { count: others.length } })
+  return Response.json({ recipients, others: { count: others.length } })
 }
 
 /**
@@ -128,10 +171,14 @@ export async function POST(
   }
 
   let draft: Buffer | null = null
+  let sentTo: string[] = []
   if (mode === 'email' || mode === 'outlook') {
-    if (!contractor.email) {
+    // One email to the main address and every extra contact.
+    const { emails, greeting } = await contractorRecipients(supabase, contractor)
+    if (emails.length === 0) {
       return Response.json({ error: 'Contractor has no email address on file' }, { status: 400 })
     }
+    sentTo = emails
     if (mode === 'email' && !isEmailConfigured()) {
       return Response.json({ error: 'Email sending is not configured (set SMTP_HOST on the server)' }, { status: 500 })
     }
@@ -141,7 +188,7 @@ export async function POST(
       // The sender is the contractor's contact for these items.
       sender: { name: profile.full_name ?? null, email: user.email ?? profile.email ?? null, phone: profile.phone ?? null },
       contractorName: contractor.company_name,
-      contactName: contractor.contact_name,
+      contactName: greeting,
       portalUrl: `${appUrl}/portal/${contractor.portal_token}`,
       message,
       items: items.map(i => ({
@@ -158,10 +205,12 @@ export async function POST(
     // They're also CC'd so they have a copy of what was sent.
     if (mode === 'outlook') {
       // Sent from the user's own Outlook, so it's in their Sent Items; no CC needed.
-      draft = await buildOutlookDraft({ to: [contractor.email], subject, html, text })
+      draft = await buildOutlookDraft({ to: emails, subject, html, text })
     } else {
       const replyTo = user.email ?? process.env.EMAIL_REPLY_TO
-      const { error: emailError } = await sendEmail({ to: contractor.email, cc: user.email, replyTo, subject, html, text })
+      // Skip the CC if the sender is already one of the recipients.
+      const cc = user.email && !emails.some(e => e.toLowerCase() === user.email!.toLowerCase()) ? user.email : null
+      const { error: emailError } = await sendEmail({ to: emails.join(', '), cc, replyTo, subject, html, text })
       if (emailError) return Response.json({ error: emailError }, { status: 500 })
     }
   }
@@ -188,7 +237,7 @@ export async function POST(
       contractor_id: contractor.id,
       contractor: contractor.company_name,
       method: mode === 'mark' ? 'manual' : mode,
-      ...(mode !== 'mark' ? { to: contractor.email } : {}),
+      ...(mode !== 'mark' ? { to: sentTo.join(', ') } : {}),
       ...(mode !== 'mark' && message ? { message } : {}),
       ...(onBehalf.has(itemId) ? { on_behalf: true } : {}),
     },
@@ -207,5 +256,5 @@ export async function POST(
     })
   }
 
-  return Response.json({ success: true, count: ids.length, mode, item_ids: ids })
+  return Response.json({ success: true, count: ids.length, mode, item_ids: ids, to: sentTo })
 }
